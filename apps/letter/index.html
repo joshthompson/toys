@@ -1,0 +1,312 @@
+<html>
+<head>
+  <meta charset="UTF-8">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Love+Ya+Like+A+Sister&display=swap" rel="stylesheet">
+  <title>Letter</title>
+  <style>
+    :root {
+      background: linear-gradient(45deg, #57d85c, #83b8e6);
+      cursor: pointer;
+      animation: hue-rotate 20s linear infinite;
+    }
+
+    @keyframes hue-rotate {
+      0% { filter: hue-rotate(calc(var(--initial-hue, 0) + 0deg)); }
+      100% { filter: hue-rotate(calc(var(--initial-hue, 0) + 360deg)); }
+    }
+
+    .letter-pixel {
+      box-sizing: border-box;
+      border: 1px solid rgba(0, 0, 0, 0.1);
+    }
+
+    #app {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    #container {
+      --h-size: calc((100vw - 2rem) / var(--width));
+      --v-size: calc((100vh - 2rem) / var(--height));
+      --size: min(var(--h-size), var(--v-size));
+      --size-px: calc(var(--container-width) / var(--width));
+
+      position: relative;
+      width: calc(var(--width) * var(--size));
+      height: calc(var(--height) * var(--size));
+      user-select: none;
+    }
+
+    .pixel {
+      position: absolute;
+      width: var(--size);
+      height: var(--size);
+      left: calc(var(--x) * var(--size));
+      top: calc(var(--y) * var(--size));
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      transform: scale(var(--scale, 1));
+
+      animation: rotation 1s linear infinite, fade-in 1s ease-out 1;
+      animation-play-state: paused, running;
+
+      &.near-mouse {
+        animation-play-state: running, running;
+        transform:
+          scale(calc(var(--scale, 1)))
+          scaleX(calc(1 + 5 * var(--near-scale, 0)));
+      }
+
+      &.invert {
+        background: black;
+        color: white;
+      }
+      &.white {
+        background: white;
+      }
+    }
+
+    @keyframes rotation {
+      0% { rotate: calc(var(--rotate)); }
+      100% { rotate: calc(var(--rotate) + 1turn); }
+    }
+
+    @keyframes fade-in {
+      0% {
+        opacity: 0;
+        transform: scale(calc(3 * var(--scale, 1)));
+      }
+      100% {
+        opacity: 1;
+        transform: scale(calc(var(--scale, 1)));
+      }
+    }
+  </style>
+</head>
+<body style="margin: 0; overflow: hidden;" onclick="again()">
+  <div id="app"></div>
+  <script>
+    const letters = [
+      'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J',
+      'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T',
+      'U', 'V', 'W', 'X', 'Y', 'Z', 'Å', 'Å', 'Ö',
+      'Ё', 'И', 'Ы', 'Э', 'Ю', 'Я',  'Б', 'Г', 'Д',
+      'Ж', 'Й', 'Л',
+      '#', '@', '%', '&', '*', '!', '?', '$', '€', '£', '¥', '¢',
+    ];
+
+    const emojis = [
+      "🦊", "🍕", "🚀", "🕶️", "🎉", "🥑", "🦁", "🎸", "🏝️",
+      "🔥", "🐼", "🍣", "🛸", "🎩", "🎈", "🌮", "🐨", "🛹", "🏔️",
+      "🦉", "🍩", "🏎️", "👑", "🎁", "🍿", "🐙", "🎮", "☄️",
+      "🦄", "🛫", "🎨", "🎂", "🍟", "🐸", "🎧", "🏖️",
+      "🦖", "🍦", "🚴", "🔮", "🎭", "🍉", "🐬", "🎻", "🌋",
+      "🐯", "🥨", "🛶", "💎", "🎪", "🥞", "🐧", "🎷", "🏕️",
+      "🐉", "🍜", "🏄", "🧳", "🎇", "🍍", "🐘", "🎺", "🏜️",
+      "🐆", "🧁", "🏂", "🏆", "🧵", "🍓", "🦍", "🪕", "🏟️",
+      "🦅", "🍪", "🏊", "🧭", "🪁", "🍒", "🐋", "🛹", "🪐",
+      "👽", "🦈", "🏎️", "⚓", "🔮", "🥝", "🐪", "🎯", 
+    ];
+
+    const fonts = [
+      'Love Ya Like A Sister',
+      'Arial', 'Verdana', 'Helvetica', 'Tahoma', 'Trebuchet MS',
+      'Times New Roman', 'Georgia', 'Garamond', 'Courier New',
+      'Brush Script MT'
+    ];
+
+    document.documentElement.style.setProperty('--initial-hue', `${Math.random() * 360}deg`);
+    document.fonts.ready.then(render);
+    const fontSize = 80;
+    const fontWeight = 'bold';
+    
+    let fontFamily = random(fonts); // 'Courier New';
+    let text = random(letters); //'A'
+
+    window.addEventListener('keypress', () => {
+      document.documentElement.style.setProperty('--initial-hue', `${Math.random() * 360}deg`);
+      text = event.key === ' ' ? random(emojis) : event.key;
+      fontFamily = random(fonts);
+      render();
+    });
+
+    let pixelData = [];
+    let containerRect = null;
+    let pixelSize = 0;
+    let threshold = 0;
+    let threshold2 = 0;
+    let lastMouse = null, rafPending = false;
+
+    function cachePixels() {
+      const container = document.getElementById('container');
+      if (!container) { pixelData = []; containerRect = null; return; }
+      containerRect = container.getBoundingClientRect();
+      pixelSize = container.offsetWidth / container.dataset.width;
+      threshold = window.innerWidth * 0.1;
+      threshold2 = threshold * threshold;
+      pixelData = [...container.querySelectorAll('.pixel')].map(el => ({
+        el,
+        cx: el.dataset.x * pixelSize,
+        cy: el.dataset.y * pixelSize,
+        near: false,
+      }));
+    }
+
+    function updatePixels() {
+      rafPending = false;
+      if (!lastMouse || !containerRect) return;
+      const mouseX = lastMouse.x - containerRect.left;
+      const mouseY = lastMouse.y - containerRect.top;
+
+      for (const p of pixelData) {
+        const dx = mouseX - p.cx, dy = mouseY - p.cy;
+        const d2 = dx * dx + dy * dy;
+        if (d2 < threshold2) {
+          const scale = 1 * (1 - Math.sqrt(d2) / threshold);
+          p.el.classList.add('near-mouse');
+          p.el.style.setProperty('--near-scale', scale);
+          p.near = true;
+        } else if (p.near) {
+          p.el.style.setProperty('--near-scale', 0);
+          p.el.classList.remove('near-mouse');
+          p.near = false;
+        }
+      }
+    }
+
+    window.addEventListener('mousemove', (event) => {
+      lastMouse = { x: event.clientX, y: event.clientY };
+      if (!rafPending) { rafPending = true; requestAnimationFrame(updatePixels); }
+    });
+    window.addEventListener('resize', cachePixels);
+    window.addEventListener('scroll', cachePixels, { passive: true });
+
+    function again() {
+      document.documentElement.style.setProperty('--initial-hue', `${Math.random() * 360}deg`);
+      text = random(letters);
+      fontFamily = random(fonts);
+      render();
+    }
+
+    async function render() {
+      document.title = `Letter - ${text}`;
+      document.getElementById('app').innerHTML = '<div id="container"></div>';
+      const container = document.getElementById('container');
+
+      const { pixels, width } = generatePixels();
+      container.dataset.width = width;
+      container.style.setProperty('--width', width);
+      container.style.setProperty('--height', pixels.length / width);
+      
+      for (let i = 0; i < pixels.length; i++) {
+        const pixel = pixels[i];
+        const x = i % width;
+        const y = Math.floor(i / width);
+
+
+        if (i % width === 0) await sleep(30);
+        if (pixel > 0) {
+          const div = document.createElement('div');
+          div.classList.add('pixel');
+          div.dataset.x = x;
+          div.dataset.y = y;
+          div.style.setProperty('--x', x);
+          div.style.setProperty('--y', y);
+          container.appendChild(div);
+          drawPixel(div, pixel)
+        }
+      }
+
+      cachePixels();
+    }
+
+    function drawPixel(div, pixel) {
+      div.classList.remove('invert', 'white');
+      if (Math.random() < 0.1) {
+        div.classList.add('invert');
+        div.style.clipPath = generateClipPath();
+      } else if (Math.random() < 0.01) {
+        div.classList.add('white');
+        div.style.clipPath = generateClipPath();
+      }
+      div.style.setProperty('--scale', (Math.random() * 1.7 + 0.5) * pixel);
+      div.style.setProperty('--rotate', `${Math.random() * 360}deg`);
+      div.style.fontSize = `calc(var(--size) * ${Math.random() * 0.25 + 0.8})`;
+      const variance = 1;
+      div.style.translate = `calc(var(--size) * ${Math.random() * variance - variance / 2}) calc(var(--size) * ${Math.random() * variance - variance / 2})`;
+      div.style.zIndex = `${Math.floor(Math.random() * 100)}`;
+      div.style.fontFamily = random(fonts);
+      const letter = random(letters);
+      div.innerHTML = Math.random() < 0.5 ? letter.toLowerCase() : letter.toUpperCase();
+      div.style.textStyle = Math.random() < 0.5 ? 'normal' : 'italic';
+    }
+
+    function generateClipPath(variance = 20) {
+      return `polygon(
+        ${Math.random() * variance}% ${Math.random() * variance}%,
+        ${(50 - variance / 2) + Math.random() * variance}% 0,
+        ${100 - Math.random() * variance}% ${Math.random() * variance}%,
+        100% ${(50 - variance / 2) + Math.random() * variance}%,
+        ${100 - Math.random() * variance}% ${100 - Math.random() * variance}%,
+        ${(50 - variance / 2) + Math.random() * variance}% 100%,
+        ${Math.random() * variance}% ${100 - Math.random() * variance}%,
+        0 ${(50 - variance / 2) + Math.random() * variance}%
+      )`
+    }
+
+    function generatePixels() {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+
+      ctx.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
+      ctx.textBaseline = 'top';
+
+      const textMetrics = ctx.measureText(text);
+
+      const visualLeft = textMetrics.actualBoundingBoxLeft;
+      const visualRight = textMetrics.actualBoundingBoxRight;
+      const trueTextWidth = visualLeft + visualRight;
+      const paddingX = 0 * Math.ceil(fontSize * 0.1); 
+
+      const visualAscent = textMetrics.actualBoundingBoxAscent;
+      const visualDescent = textMetrics.actualBoundingBoxDescent;
+      const trueTextHeight = visualAscent + visualDescent;
+
+      canvas.width = Math.ceil(trueTextWidth) + (paddingX * 2);
+      canvas.height = Math.ceil(trueTextHeight);
+
+      ctx.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
+      ctx.fillStyle = 'black';
+      ctx.textBaseline = 'top';
+
+      const renderX = visualLeft + paddingX;
+      const renderY = visualAscent;
+      ctx.fillText(text, renderX, renderY);
+
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+      return {
+        pixels: Array.from(
+          { length: imageData.data.length / 4 },
+          (_, i) => imageData.data[i * 4 + 3] / 255,
+        ),
+        width: canvas.width,
+      };
+    }
+
+    function sleep(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms))
+    }
+
+    function random(array) {
+      return array[Math.floor(Math.random() * array.length)];
+    }
+  </script>
+</body>
+</html>

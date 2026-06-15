@@ -1,0 +1,22 @@
+{
+  "name": "textog",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "sourceRoot": "apps/textog",
+  "tags": ["type:static"],
+  "targets": {
+    "serve": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "vite apps/textog --open"
+      }
+    },
+    "build": {
+      "executor": "nx:run-commands",
+      "outputs": ["{workspaceRoot}/dist/textog"],
+      "options": {
+        "command": "rsync -a --exclude=project.json --exclude=.DS_Store apps/textog/ dist/textog/"
+      }
+    }
+  }
+}

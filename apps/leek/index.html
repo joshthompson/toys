@@ -1,0 +1,86 @@
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Leek</title>
+  <style>
+    body {
+      margin: 0;
+    }
+    #app {
+      display: grid;
+      grid-template-columns: repeat(var(--size), 1fr);
+
+      div {
+        width: calc(100vw / var(--size));
+        height: calc(100vh / var(--size));
+        aspect-ratio: 1;
+        background: #fef374;
+
+        &:nth-child(3n - 1) {
+          background: #ffab4b;
+        }
+
+        &:nth-child(3n) {
+          background: #f8614d;
+        }
+
+        opacity: calc(var(--v) * 1 + 0);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script>
+    const app = document.getElementById('app');
+    const size = 100;
+
+    // const grid = Array(size).fill(null).map(() => Array(size).fill(0));
+
+    app.innerHTML = Array(size ** 2).fill('<div></div>').join('');
+    app.style.setProperty('--size', size);
+
+    const cells = Array.from(app.children);
+
+    cells.forEach((cell, index) => {
+      const x = index % size;
+      const y = Math.floor(index / size);
+      setCellProp(cell, 'x', x);
+      setCellProp(cell, 'y', y);
+      setCellProp(cell, 'v', 0);
+
+      cell.addEventListener('click', (event) => {
+        setCellProp(cell, 'v', 1);
+      });
+    });
+
+    function evolve() {
+      document.querySelectorAll('[data-v="1"]').forEach(cell => {
+        const x = parseInt(cell.dataset.x);
+        const y = parseInt(cell.dataset.y);
+        setCellProp(cell, 'v', -1);
+
+        document.querySelectorAll(`[data-x="${x - 1}"][data-y="${y}"]` //+
+          // `, [data-x="${x + 1}"][data-y="${y}"]` +
+          // `, [data-x="${x}"][data-y="${y - 1}"]` +
+          // `, [data-x="${x}"][data-y="${y + 1}"]`
+        ).forEach(neighbour => {
+          if (Math.random() < 1) {
+            setCellProp(neighbour, 'v', parseInt(neighbour.dataset.v) + 1);
+          }
+        });
+
+       
+      });
+    }
+
+    function setCellProp(cell, prop, value) {
+      cell.setAttribute(`data-${prop}`, value);
+      cell.style.setProperty(`--${prop}`, value);
+    }
+
+    setInterval(evolve, 100);
+
+  </script>
+</body>
+</html>

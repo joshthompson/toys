@@ -1,0 +1,28 @@
+{
+  "name": "toys",
+  "version": "0.0.0",
+  "private": true,
+  "packageManager": "pnpm@10.33.3",
+  "scripts": {
+    "serve": "nx serve home",
+    "build": "nx run-many -t build",
+    "preview": "nx run-many -t build && vite dist --open",
+    "preview:watch": "nx run-many -t build && concurrently -k -n build,serve -c blue,green \"nx watch --all -- nx run-many -t build\" \"vite dist --open\"",
+    "new-toy": "node tools/new-toy.mjs",
+    "home:serve": "nx serve home",
+    "home:build": "nx build home",
+    "leek:serve": "nx serve leek",
+    "leek:build": "nx build leek",
+    "textog:serve": "nx serve textog",
+    "textog:build": "nx build textog",
+    "letter:serve": "nx serve letter",
+    "letter:build": "nx build letter",
+    "pipe:serve": "nx serve pipe",
+    "pipe:build": "nx build pipe"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.3",
+    "nx": "^21.6.4",
+    "vite": "^6.0.0"
+  }
+}

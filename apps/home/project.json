@@ -1,0 +1,26 @@
+{
+  "name": "home",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "sourceRoot": "apps/home",
+  "tags": ["type:static"],
+  "targets": {
+    "serve": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "vite apps/home --open"
+      }
+    },
+    "build": {
+      "executor": "nx:run-commands",
+      "outputs": ["{workspaceRoot}/dist/index.html", "{workspaceRoot}/dist/404.html"],
+      "options": {
+        "parallel": false,
+        "commands": [
+          "rsync -a --exclude=project.json --exclude=.DS_Store apps/home/ dist/",
+          "cp dist/index.html dist/404.html"
+        ]
+      }
+    }
+  }
+}
