@@ -110,6 +110,9 @@
       },
     ];
 
+    const BASE_URL = new URL('.', location.href).pathname;
+    const resolve = (url) => /^https?:\/\//.test(url) ? url : BASE_URL + url.replace(/^\//, '');
+
     const colours = ['#ff4747', '#5066e0', '#5aa65e', '#feb03d', '#874a87'];
     const main = document.getElementById('toys');
 
@@ -120,13 +123,13 @@
 
       if (toy.iframe) {
         const iframe = document.createElement('iframe');
-        iframe.src = toy.iframe;
+        iframe.src = resolve(toy.iframe);
         iframe.style.width = '100%';
         iframe.style.height = '100%';
         iframe.style.border = 'none';
         element.appendChild(iframe);
       } else if (toy.image) {
-        element.style.setProperty('background-image', `url(${toy.image})`);
+        element.style.setProperty('background-image', `url(${resolve(toy.image)})`);
       } else {
         element.innerHTML = `
           ${toy.name}
@@ -136,7 +139,7 @@
 
       
       if (toy.href) {
-        element.href = toy.href;
+        element.href = resolve(toy.href);
         element.target = '_blank';
       } else {
         element.setAttribute('aria-disabled', 'true');
