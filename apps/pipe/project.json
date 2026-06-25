@@ -19,7 +19,7 @@
         "{workspaceRoot}/dist/pipe"
       ],
       "options": {
-        "command": "rsync -a --exclude=project.json --exclude=.DS_Store apps/pipe/ dist/pipe/"
+        "command": "mkdir -p dist/pipe && rsync -a --exclude=project.json --exclude=.DS_Store apps/pipe/ dist/pipe/"
       }
     }
   }

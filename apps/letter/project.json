@@ -19,7 +19,7 @@
         "{workspaceRoot}/dist/letter"
       ],
       "options": {
-        "command": "rsync -a --exclude=project.json --exclude=.DS_Store apps/letter/ dist/letter/"
+        "command": "mkdir -p dist/letter && rsync -a --exclude=project.json --exclude=.DS_Store apps/letter/ dist/letter/"
       }
     }
   }

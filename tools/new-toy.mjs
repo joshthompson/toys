@@ -60,7 +60,7 @@ writeFileSync(join(dir, 'project.json'), JSON.stringify({
       executor: 'nx:run-commands',
       outputs: [`{workspaceRoot}/dist/${name}`],
       options: {
-        command: `rsync -a --exclude=project.json --exclude=.DS_Store apps/${name}/ dist/${name}/`,
+        command: `mkdir -p dist/${name} && rsync -a --exclude=project.json --exclude=.DS_Store apps/${name}/ dist/${name}/`,
       },
     },
   },

@@ -15,7 +15,7 @@
       "executor": "nx:run-commands",
       "outputs": ["{workspaceRoot}/dist/leek"],
       "options": {
-        "command": "rsync -a --exclude=project.json --exclude=.DS_Store apps/leek/ dist/leek/"
+        "command": "mkdir -p dist/leek && rsync -a --exclude=project.json --exclude=.DS_Store apps/leek/ dist/leek/"
       }
     }
   }

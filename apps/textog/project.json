@@ -15,7 +15,7 @@
       "executor": "nx:run-commands",
       "outputs": ["{workspaceRoot}/dist/textog"],
       "options": {
-        "command": "rsync -a --exclude=project.json --exclude=.DS_Store apps/textog/ dist/textog/"
+        "command": "mkdir -p dist/textog && rsync -a --exclude=project.json --exclude=.DS_Store apps/textog/ dist/textog/"
       }
     }
   }
