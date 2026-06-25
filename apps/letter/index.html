@@ -92,6 +92,8 @@
 <body style="margin: 0; overflow: hidden;" onclick="again()">
   <div id="app"></div>
   <script>
+    const BASE_URL = new URL('.', location.href).pathname;
+
     const letters = [
       'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J',
       'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T',

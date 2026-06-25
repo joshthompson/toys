@@ -39,7 +39,11 @@ writeFileSync(join(dir, 'index.html'), `<!doctype html>
 <body>
   <h1>${display}</h1>
   <script>
-    console.log('${display} loaded');
+    // This toy's root URL — '/toys/${name}/' on GitHub Pages, '/' in local dev.
+    // Derived from the page's own location; prefix it onto local asset paths
+    // (e.g. BASE_URL + 'img/foo.png') so they resolve under the toy's own path.
+    const BASE_URL = new URL('.', location.href).pathname;
+    console.log('${display} loaded', BASE_URL);
   </script>
 </body>
 </html>
