@@ -18,11 +18,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Install pnpm before Node caching
+      # Install pnpm before Node caching (version comes from packageManager in package.json)
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 10
 
       # Then set up Node + pnpm cache
       - name: Setup Node.js
