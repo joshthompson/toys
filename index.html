@@ -1,0 +1,148 @@
+<html>
+<head>
+  <meta charset="UTF-8">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Love+Ya+Like+A+Sister&display=swap" rel="stylesheet">
+  <title>★ Josh's Toys ★</title>
+  <style>
+    :root {
+      font-family: "Love Ya Like A Sister", cursive;
+      font-weight: 400;
+      font-style: normal;
+
+      --spacing: 20px;
+
+      --text-1: 36px;
+      --text-2: 24px;
+      --text-3: 18px;
+      --text-4: 14px;
+    }
+    body {
+      margin: 0;
+      text-align: center;
+    }
+    header {
+      border-bottom: 2px solid black;
+      padding: var(--spacing);
+      font-size: var(--text-1);
+    }
+    #intro {
+      padding: var(--spacing);
+      font-size: var(--text-2);
+    }
+    main {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: var(--spacing);
+      margin: 0 var(--spacing) var(--spacing);
+    }
+    .toy {
+      --shadow-amount: 2px;
+      border: 2px solid black;
+      font-size: var(--text-3);
+      box-shadow: calc(-1 * var(--shadow-amount)) calc(-1 * var(--shadow-amount)) 0 0 black;
+      border-radius: 2px;
+      corner-shape: notch;
+      color: inherit;
+      text-decoration: none;
+      display: block;
+      background-size: cover;
+      background-position: center;
+      aspect-ratio: 16 / 9;
+
+      &:active {
+        box-shadow: 0cm 0cm 0 0 black;
+        transform: translate(calc(-1 * var(--shadow-amount)), calc(-1 * var(--shadow-amount)));
+        cursor: pointer;
+      }
+    }
+    .toy[aria-disabled="true"] {
+      opacity: 0.4;
+      pointer-events: none;
+    }
+    .toy .badge {
+      display: block;
+      font-size: var(--text-4);
+      opacity: 0.6;
+    }
+  </style>
+</head>
+<body>
+  <header>* Josh's Toys *</header>
+  <div id="intro">Here are a collection of web toys I have made whilst playing around in my free time.</div>
+  <main id="toys"></main>
+  <script>
+    // Add a toy by dropping a line in here.
+    //   href: relative path  -> internal toy in this repo, e.g. "leek/" -> /toys/leek/
+    //   href: full URL        -> externally hosted toy in another repo
+    //   href: null            -> shows as a "coming soon" placeholder
+    const toys = [
+      {
+        name: "Let's Battle!",
+        href: 'https://joshthompson.github.io/lets-battle/',
+        image: '/images/lets-battle.png',
+      },
+      {
+        name: 'Weird Text',
+        href: 'textog/',
+        image: '/images/text.png',
+      },
+      {
+        name: 'Letter',
+        href: 'letter/',
+        iframe: '/letter/',
+      },
+      {
+        name: 'Alisa The Freediver',
+        href: 'https://joshthompson.github.io/freediver/',
+        image: '/images/freediver.png',
+      },
+      {
+        name: 'Scoop Bus Run Club',
+        href: 'https://scoopbus.run/',
+        image: '/images/scoopbus.png',
+      },
+      {
+        name: 'Dino Game',
+        href: 'https://joshthompson.github.io/dino-game/',
+        image: '/images/dino-game.png',
+      },
+    ];
+
+    const colours = ['#ff4747', '#5066e0', '#5aa65e', '#feb03d', '#874a87'];
+    const main = document.getElementById('toys');
+
+    toys.forEach((toy, n) => {
+      const element = document.createElement('a');
+      element.className = 'toy';
+      element.style.setProperty('--toy-colour', colours[n % colours.length]);
+
+      if (toy.iframe) {
+        const iframe = document.createElement('iframe');
+        iframe.src = toy.iframe;
+        iframe.style.width = '100%';
+        iframe.style.height = '100%';
+        iframe.style.border = 'none';
+        element.appendChild(iframe);
+      } else if (toy.image) {
+        element.style.setProperty('background-image', `url(${toy.image})`);
+      } else {
+        element.innerHTML = `
+          ${toy.name}
+          ${toy.href ? '' : '<div class="badge">coming soon</div>'}
+        `;
+      }
+
+      
+      if (toy.href) {
+        element.href = toy.href;
+        element.target = '_blank';
+      } else {
+        element.setAttribute('aria-disabled', 'true');
+      }
+      main.appendChild(element);
+    });
+  </script>
+</body>
+</html>

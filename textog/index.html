@@ -1,0 +1,260 @@
+<html>
+<head>
+  <meta charset="UTF-8">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Love+Ya+Like+A+Sister&display=swap" rel="stylesheet">
+  <title>Textography</title>
+  <style>
+    :root {
+      /* Provide fallbacks so calculations don't break early on load */
+      font-family: "Love Ya Like A Sister", cursive;
+      font-weight: 400;
+      font-style: normal;
+    }
+
+    #form {
+      padding: 0.5rem;
+      border-bottom: 1px solid black;
+    }
+
+    .field {
+      display: inline-block;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    #app {
+      padding: 2rem 2vw;
+      user-select: none;
+    }
+
+    #container {
+      --pixel-px-size: calc(var(--container-width) / var(--columns, 1));
+
+      display: grid;
+      grid-template-columns: repeat(var(--columns), 1fr);
+      width: 100%;
+    }
+
+    .pixel {
+      --pixel-size: calc(1px * var(--container-width) / var(--columns));
+
+      width: var(--pixel-size);
+      height: var(--pixel-size);
+
+      &:not(:empty) {
+        --distance-x: calc(var(--mouse-x) - var(--x) * var(--pixel-px-size));
+        --distance-y: calc(var(--mouse-y) - var(--y) * var(--pixel-px-size));
+        --distance: calc(
+          sqrt(var(--distance-x) * var(--distance-x) + var(--distance-y) * var(--distance-y))
+        );
+        --threshold: calc(var(--pixel-px-size) * 10);
+
+        font-size: calc(1.2 * var(--pixel-size));
+        text-align: center;
+        line-height: 1;
+
+        &[data-mode="1"] {
+          text-transform: if(style(--distance < var(--threshold)): uppercase; else: lowercase);
+          color: if(
+            style(--distance < var(--threshold)): red;
+            else: blue
+          );
+        }
+
+        &[data-mode="2"] {
+          /* rotate: calc((var(--distance-x) - var(--distance-y)) * 0.0001turn); */
+          transform: scale(calc(var(--distance) / 50 + 0.5));
+          color: color-mix(
+            in srgb, 
+            #ed3232,
+            #000000 calc((var(--distance) / 500) * 50%)
+            );
+        }
+
+        &[data-mode="3"] {
+          /* rotate: calc((var(--distance-x) - var(--distance-y)) * 0.0001turn); */
+          rotate: atan2(var(--distance-y), var(--distance-x));
+          color: color-mix(
+            in srgb, 
+            #32ed5a,
+            #000000 calc((var(--distance) / 500) * 50%)
+            );
+          text-transform: if(style(--distance < var(--threshold)): uppercase; else: lowercase);
+        }
+      }
+    }
+  </style>
+</head>
+<body style="margin: 0; overflow: hidden;">
+  <form id="form">
+    <div class="field">
+      <label for="text">Text:</label>
+      <input type="text" value="Hi there!" value="abcdef" oninput="render()" id="text">
+    </div>
+    <div class="field">
+      <label for="threshold">Pixel Threshold:</label>
+      <input type="range" value="0.5" min="0.01" max="1" step="0.01" oninput="render()" id="threshold">
+    </div>
+    <div class="field">
+      <label for="font-size">Base Font Size:</label>
+      <input type="range" value="24" min="10" max="50" step="1" oninput="render()" id="font-size">
+    </div>
+    <button type="button" onclick="render(1)">Mode 1</button>
+    <button type="button" onclick="render(2)">Mode 2</button>
+    <button type="button" onclick="render(3)">Mode 3</button>
+  </form>
+  <div id="app">
+    <div id="container"></div>
+  </div>
+  <script>
+    document.fonts.ready.then(init);
+    const fontSize = 24;
+    const fontFamily = 'Love Ya Like A Sister';
+    const container = document.getElementById('container');
+    let mode = 3;
+
+    function getText() {
+      return document.getElementById('text')?.value || '-';
+    }
+
+    async function init() {
+      await document.fonts.load(`${fontSize}px "${fontFamily}"`);
+
+      window.addEventListener('mousemove', e => {
+        const container = document.getElementById('container');
+        if (!container) return;
+        const containerMouseX = e.clientX - container.offsetLeft;
+        const containerMouseY = e.clientY - container.offsetTop;
+        container.style.setProperty('--mouse-x', containerMouseX);
+        container.style.setProperty('--mouse-y', containerMouseY);
+        container.style.setProperty('--container-width', container.offsetWidth);
+      });
+
+      render();
+    }
+
+    const presets = [
+      {
+        text: 'Follow',
+        name: 'Follow',
+        colorMode: 'distance',
+        color: '#32ed5a',
+        characterMode: 'text',
+        rotate: 'follow',
+      },
+      {
+        text: 'Wave',
+        name: 'Wave',
+        colorMode: 'distance',
+        color: '#32ed5a',
+        characterMode: 'text',
+        rotate: 'wave',
+      },
+      {
+        text: 'Hashed',
+        name: 'Hashed',
+        colorMode: 'distance',
+        color: '#ed3232',
+        characterMode: '[##]',
+        scale: 'distance',
+      },
+    ]
+
+    function setContainerCSSProperties() {
+      const container = document.getElementById('container');
+      if (!container) return;
+      container.style.setProperty('--container-width', container.offsetWidth);
+    }
+
+    function render(newMode) {
+      if (newMode !== undefined) mode = newMode;
+      const { pixels, width } = generatePixels();
+      
+      document.getElementById('container').innerHTML = '';
+      container.style.setProperty('--columns', width);
+      
+      pixels.forEach((alpha, n) => {
+        const pixelDiv = document.createElement('div');
+        pixelDiv.style.setProperty('--x', n % width);
+        pixelDiv.style.setProperty('--y', Math.floor(n / width));
+        pixelDiv.classList.add('pixel');
+        pixelDiv.dataset.alpha = alpha;
+        container.appendChild(pixelDiv);
+      });
+      document.getElementById('app').appendChild(container);
+
+      if (mode === 1) mode1();
+      else if (mode === 2) mode2();
+      else if (mode === 3) mode3();
+    }
+
+    function generatePixels() {
+      const fontSize = parseInt(document.getElementById('font-size').value, 10);
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const text = getText();
+
+      ctx.font = `${fontSize}px ${fontFamily}`;
+      ctx.fillStyle = 'black';
+      ctx.textBaseline = 'top';
+
+      const textMetrics = ctx.measureText(text);
+      const textWidth = textMetrics.width;
+      const textHeight = textMetrics.fontBoundingBoxAscent + textMetrics.fontBoundingBoxDescent;
+
+      canvas.width = Math.ceil(textWidth);
+      canvas.height = Math.ceil(textHeight);
+      ctx.font = `${fontSize}px ${fontFamily}`;
+      ctx.fillStyle = 'black';
+      ctx.textBaseline = 'top';
+      ctx.fillText(text, 0, 0);
+
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      canvas.remove();
+
+      return {
+        pixels:Array.from(
+          { length: imageData.data.length / 4 },
+          (_, i) => imageData.data[i * 4 + 3] / 255,
+        ),
+        width: canvas.width,
+      };
+    }
+
+    function mode1() {
+      let n = 0;
+      const text = getText();
+      const threshold = parseFloat(document.getElementById('threshold').value);
+      container.childNodes.forEach(pixelDiv => {
+        pixelDiv.setAttribute('data-mode', 1);
+        pixelDiv.innerHTML = pixelDiv.dataset.alpha >= threshold ? text[n++ % text.length] : '';
+      });
+    }
+
+    function mode2() {
+      let n = 0;
+      const threshold = parseFloat(document.getElementById('threshold').value);
+      container.childNodes.forEach(pixelDiv => {
+        pixelDiv.setAttribute('data-mode', 2);
+        pixelDiv.innerHTML = pixelDiv.dataset.alpha >= threshold ? '##' : '';
+        // pixelDiv.innerHTML = pixelDiv.dataset.alpha >= threshold ? '...' : '';
+      });
+    }
+
+    function mode3() {
+      let n = 0;
+      const text = getText();
+      const threshold = parseFloat(document.getElementById('threshold').value);
+      console.log('threshold', threshold);
+      container.childNodes.forEach(pixelDiv => {
+        pixelDiv.setAttribute('data-mode', 3);
+        // pixelDiv.innerHTML = pixelDiv.dataset.alpha > 0.1 ? '.............' : '';
+        // pixelDiv.innerHTML = pixelDiv.dataset.alpha > 0.1 ? '|' : '';
+        pixelDiv.innerHTML = pixelDiv.dataset.alpha >= threshold ? text[n++ % text.length] + text[n++ % text.length] + text[n++ % text.length] + text[n++ % text.length] + text[n++ % text.length] + text[n++ % text.length] : '';
+      });
+    }
+  </script>
+</body>
+</html>

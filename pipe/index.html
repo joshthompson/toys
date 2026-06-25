@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>pipe</title>
+  <style>
+    body { margin: 0; font-family: system-ui, sans-serif; display: grid; place-items: center; min-height: 100vh; }
+  </style>
+</head>
+<body>
+  <svg
+    width="1000"
+    height="1000"
+    viewBox="0 0 1000 1000"
+    xmlns="http://www.w3.org/2000/svg"
+    xmlns:xlink="http://www.w3.org/1999/xlink"
+  >
+  </svg>
+  <script>
+    const size = 1000;
+    const svg = document.querySelector('svg');
+
+    const monster = {
+      x: 100,
+      parts: {
+        type: 'body',
+        children: [
+          { position: 0, child: { type: 'head', children: [] } },
+          { position: 1, child: { type: 'arm', children: [] } },
+          { position: 2, child: { type: 'arm', children: [] } },
+          { position: 3, child: { type: 'leg', children: [] } },
+          { position: 4, child: { type: 'leg', children: [] } }
+        ]
+      }
+    };
+
+    function renderMonster(monster, parentElement) {
+      const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      group.setAttribute('transform', `translate(${monster.x}, 0)`);
+      parentElement.appendChild(group);
+
+      const body = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      body.setAttribute('x', -50);
+      body.setAttribute('y', 0);
+      body.setAttribute('width', 100);
+      body.setAttribute('height', 200);
+      body.setAttribute('fill', 'green');
+      group.appendChild(body);
+
+      monster.parts.children.forEach(part => {
+        renderMonster(part.child, group);
+      });
+    }
+
+    renderMonster(monster, svg);
+  </script>
+</body>
+</html>
