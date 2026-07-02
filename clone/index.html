@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>clone</title>
+  <style>
+    body { margin: 0; font-family: system-ui, sans-serif; display: grid; place-items: center; min-height: 100vh; }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    :root {
+      --cell-size: 64px;
+    }
+
+    .level-container {
+      display: grid;
+      grid-template-columns: repeat(var(--width), var(--cell-size));
+      grid-template-rows: repeat(var(--height), var(--cell-size));
+      gap: 0px;
+      image-rendering: pixelated;
+    }
+    .cell {
+      position: relative;
+      width: var(--cell-size);
+      height: var(--cell-size);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #CCC;
+      border: 2px solid;
+      border-top-color: #FFFFFF66;
+      border-left-color: #FFFFFF66;
+      border-right-color: #00000066;
+      border-bottom-color: #00000066;
+    }
+
+    .layer {
+      position: absolute;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      inset: -2px;
+      background-repeat: no-repeat;
+      background-position: center center;
+        background-size: contain;
+
+      &[data-type="wall"] {
+        background: #444444;
+        border: 4px solid;
+        border-top-color: #FFFFFF22;
+        border-left-color: #FFFFFF22;
+        border-right-color: #00000022;
+        border-bottom-color: #00000022;
+      }
+
+      &[data-type="block"] {
+        background: #78603f;
+        border: 4px solid;
+        border-top-color: #FFFFFF22;
+        border-left-color: #FFFFFF22;
+        border-right-color: #00000022;
+        border-bottom-color: #00000022;
+      }
+
+      &[data-type="chip"] {
+        background-image: url('./chip.png');
+      }
+
+      &[data-type="water+chip"] {
+        background-image: url('./water+chip.png');
+      }
+
+      &[data-type="block"] {
+        background-image: url('./block.png');
+      }
+
+      &[data-type="water"] {
+        background-image: url('./water.png');
+      }
+
+      &[data-type="exit"] {
+        background-image: url('./exit.png');
+      }
+
+      &[data-type="dirt"] {
+        background: #a4633a;
+      }
+    }
+  </style>
+</head>
+<body>
+  <h1>clone</h1>
+  <div id="app"></div>
+  <script>
+    const BASE_URL = new URL('.', location.href).pathname;
+    console.log('clone loaded', BASE_URL);
+
+    const level = {
+      grid: [
+        [cell('wall'), cell('wall'), cell('wall'), cell('wall'), cell('wall'), cell('wall'), cell(), cell()],
+        [cell('wall'), cell('chip'), cell(), cell(), cell(), cell('wall'), cell(), cell()],
+        [cell('wall'), cell(), cell(), cell(), cell(), cell('wall'), cell(), cell()],
+        [cell('wall'), cell(), cell('block'), cell('block'), cell(), cell('wall'), cell('wall'), cell('wall')],
+        [cell('wall'), cell(), cell(), cell(), cell('water'), cell('water'), cell('exit'), cell('wall')],
+        [cell('wall'), cell('wall'), cell('wall'), cell('wall'), cell('wall'), cell('wall'), cell('wall'), cell('wall')],
+      ]
+    }
+
+    function cell(...types) {
+      return types.map(type => ({ type }));
+    }
+
+    // Snapshot the pristine level so death can restore it
+    const initialGrid = structuredClone(level.grid);
+    let dead = false;
+
+    // Restore the level to its starting state
+    function resetLevel() {
+      level.grid = structuredClone(initialGrid);
+      dead = false;
+      renderLevel(level);
+    }
+
+    // Death: let the "chip in water" frame paint, then alert and reset
+    function killChip(reason = 'You died') {
+      dead = true;
+      setTimeout(() => {
+        alert(reason);
+        resetLevel();
+      }, 50);
+    }
+
+    // Win: reached the exit
+    function winGame() {
+      dead = true;
+      setTimeout(() => {
+        alert('Winner');
+        resetLevel();
+      }, 50);
+    }
+
+    // Layer combinations: when all of `layers` share a tile, they render as a
+    // single `into` div. Display-only — the grid keeps the real layers for logic.
+    const combinations = [
+      { layers: ['water', 'chip'], into: 'water+chip' },
+    ];
+
+    function combineLayers(layers) {
+      let result = layers;
+      for (const combo of combinations) {
+        const types = result.map(layer => layer.type);
+        if (combo.layers.every(type => types.includes(type))) {
+          result = [
+            ...result.filter(layer => !combo.layers.includes(layer.type)),
+            { type: combo.into },
+          ];
+        }
+      }
+      return result;
+    }
+
+    function renderLevel(level) {
+      document.getElementById('app').innerHTML = '';
+      const container = createDiv(null, 'level-container');
+      container.style.setProperty('--width', level.grid[0].length);
+      container.style.setProperty('--height', level.grid.length);
+
+      level.grid.forEach(row => {
+        row.forEach(cell => {
+          const cellDiv = createDiv(container, 'cell');
+
+          combineLayers(cell).forEach((layer, n) => {
+            if (layer.type) {
+              const layerDiv = createDiv(cellDiv, 'layer', { type: layer.type });
+              layerDiv.style.setProperty('z-index', n);
+            }
+          });
+        });
+      });
+
+      document.getElementById('app').appendChild(container);
+    }
+
+    function createDiv(parent, className, attributes = {}) {
+      const div = document.createElement('div');
+      div.classList.add(className);
+      parent?.appendChild(div);
+      Object.entries(attributes).forEach(([key, value]) => {
+        div.setAttribute(`data-${key}`, value);
+      });
+      return div;
+    }
+
+    window.addEventListener('keydown', event => {
+      if (event.key === 'ArrowLeft' || event.key === 'a') moveChip(-1, 0);
+      if (event.key === 'ArrowRight' || event.key === 'd') moveChip(1, 0);
+      if (event.key === 'ArrowUp' || event.key === 'w') moveChip(0, -1);
+      if (event.key === 'ArrowDown' || event.key === 's') moveChip(0, 1);
+    });
+
+    function moveChip(dx, dy) {
+      if (dead) return;
+
+      const chipPos = findChip(level);
+      if (!chipPos) return;
+
+      const targetX = chipPos.x + dx;
+      const targetY = chipPos.y + dy;
+
+      if (isCellEmpty(level, targetX, targetY)) {
+        level.grid[chipPos.y][chipPos.x] = level.grid[chipPos.y][chipPos.x].filter(layer => layer.type !== 'chip');
+        level.grid[targetY][targetX].push({ type: 'chip' });
+        renderLevel(level);
+
+        // Walking into water is fatal — reset the level
+        if (level.grid[targetY][targetX].some(layer => layer.type === 'water')) {
+          killChip(`Chip can't swim without flippers`);
+          return;
+        }
+
+        // Reaching the exit wins
+        if (level.grid[targetY][targetX].some(layer => layer.type === 'exit')) {
+          winGame();
+          return;
+        }
+      }
+      // Can push block
+      else if (level.grid[targetY][targetX].some(layer => layer.type === 'block')) {
+        const blockTargetX = targetX + dx;
+        const blockTargetY = targetY + dy;
+        // Blocks can't be pushed onto dirt (the chip can still walk onto it)
+        if (isCellEmpty(level, blockTargetX, blockTargetY) && !level.grid[blockTargetY][blockTargetX].some(layer => layer.type === 'dirt')) {
+          // Move block
+          level.grid[targetY][targetX] = level.grid[targetY][targetX].filter(layer => layer.type !== 'block');
+          level.grid[blockTargetY][blockTargetX].push({ type: 'block' });
+          // Block pushed onto water immediately becomes dirt
+          if (level.grid[blockTargetY][blockTargetX].some(layer => layer.type === 'water')) {
+            level.grid[blockTargetY][blockTargetX] = level.grid[blockTargetY][blockTargetX].filter(layer => layer.type !== 'block' && layer.type !== 'water');
+            level.grid[blockTargetY][blockTargetX].push({ type: 'dirt' });
+          }
+          // Move chip
+          level.grid[chipPos.y][chipPos.x] = level.grid[chipPos.y][chipPos.x].filter(layer => layer.type !== 'chip');
+          level.grid[targetY][targetX].push({ type: 'chip' });
+          renderLevel(level);
+        }
+      }
+
+      // Stand on dirt removes it
+      if (level.grid[targetY][targetX].some(layer => layer.type === 'dirt')) {
+        level.grid[targetY][targetX] = level.grid[targetY][targetX].filter(layer => layer.type !== 'dirt');
+        renderLevel(level);
+      }
+    }
+
+    function findChip(level) {
+      for (let y = 0; y < level.grid.length; y++) {
+        for (let x = 0; x < level.grid[y].length; x++) {
+          if (level.grid[y][x].some(layer => layer.type === 'chip')) {
+            return { x, y };
+          }
+        }
+      }
+      return null;
+    }
+
+    function isCellEmpty(level, x, y) {
+      if (y < 0 || y >= level.grid.length || x < 0 || x >= level.grid[0].length) return false;
+      return !level.grid[y][x].some(layer => layer.type === 'wall' || layer.type === 'block');
+    }
+
+    renderLevel(level);
+  </script>
+</body>
+</html>

@@ -101,15 +101,16 @@
       'Ё', 'И', 'Ы', 'Э', 'Ю', 'Я',  'Б', 'Г', 'Д',
       'Ж', 'Й', 'Л',
       '#', '@', '%', '&', '*', '!', '?', '$', '€', '£', '¥', '¢',
+      '∑', '∆', '√', '∞', '≈', '≠', '≤', '≥', '±', '÷', '¶', '‽',
     ];
 
     const emojis = [
       "🦓", "🦄", "🐴", "🦧", "🦍", "🦛", "🦏", "🐘", "🐪", "🐫", "🦒", "🦘", "🦬", "🐃", "🐂", 
       "🦌", "🐐", "🐏", "🐑", "🦙", "🐗", "🐖", "🐎", "🦏", "🦡", "🦫", "🦦", "🦥", "🐿️", "🦔",
       "🦅", "🦆", "🦢", "🦉", "🦤", "🦩", "🦜", "🐓", "🐥",
-      "🐳", "🐋", "🐬", "🦭", "🐟", "🐠", "🐡", "🦈", "🐙", "🦀", "🦞", "🦐", "🦑",
+      "🐳", "🐋", "🐬", "🦭", "🐠", "🐡", "🦈", "🐙", "🦀", "🦞", "🦐", "🦑",
       "🐊", "🐢", "🦎", "🐍", "🐉", "🦕", "🦖",
-      "🦋", "🐛", "🐜", "🐝", "🪲", "🐞", "🦗", "🕷️", "🕸️", "🦂", "🦟", "🪰", "🪱"
+      "🦋", "🐜", "🐝", "🪲", "🐞", "🦗", "🕷️", "🕸️", "🦂", "🦟", "🪰", "🪱"
     ];
 
     const fonts = [
@@ -208,7 +209,7 @@
         const y = Math.floor(i / width);
 
 
-        if (i % width === 0) await sleep(30);
+        if (i % width === 0) await sleep(50);
         if (pixel > 0) {
           const div = document.createElement('div');
           div.classList.add('pixel');
@@ -236,7 +237,7 @@
       div.style.setProperty('--scale', (Math.random() * 1.7 + 0.5) * pixel);
       div.style.setProperty('--rotate', `${Math.random() * 360}deg`);
       div.style.fontSize = `calc(var(--size) * ${Math.random() * 0.25 + 0.8})`;
-      const variance = 1;
+      const variance = 0.5;
       div.style.translate = `calc(var(--size) * ${Math.random() * variance - variance / 2}) calc(var(--size) * ${Math.random() * variance - variance / 2})`;
       div.style.zIndex = `${Math.floor(Math.random() * 100)}`;
       div.style.fontFamily = random(fonts);
@@ -262,33 +263,52 @@
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
 
-      ctx.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
-      ctx.textBaseline = 'top';
+      const pixelLimit = 3000;
+      const fontSizeMin = 20;
+      let currentFontSize = fontSize;
+      let finalWidth = 0;
+      let finalHeight = 0;
+      let renderX = 0;
+      let renderY = 0;
+      let textMetrics = null;
 
-      const textMetrics = ctx.measureText(text);
+      while (true) {
+        ctx.font = `${fontWeight} ${currentFontSize}px ${fontFamily}`;
+        textMetrics = ctx.measureText(text);
 
-      const visualLeft = textMetrics.actualBoundingBoxLeft;
-      const visualRight = textMetrics.actualBoundingBoxRight;
-      const trueTextWidth = visualLeft + visualRight;
-      const paddingX = 0 * Math.ceil(fontSize * 0.1); 
+        const visualLeft = textMetrics.actualBoundingBoxLeft;
+        const visualRight = textMetrics.actualBoundingBoxRight;
+        const visualAscent = textMetrics.actualBoundingBoxAscent;
+        const visualDescent = textMetrics.actualBoundingBoxDescent;
 
-      const visualAscent = textMetrics.actualBoundingBoxAscent;
-      const visualDescent = textMetrics.actualBoundingBoxDescent;
-      const trueTextHeight = visualAscent + visualDescent;
+        finalWidth = Math.ceil(visualLeft + visualRight);
+        finalHeight = Math.ceil(visualAscent + visualDescent);
+        const pixelCount = finalWidth * finalHeight;
 
-      canvas.width = Math.ceil(trueTextWidth) + (paddingX * 2);
-      canvas.height = Math.ceil(trueTextHeight);
+        if (pixelCount > pixelLimit && currentFontSize > fontSizeMin) {
+          currentFontSize -= 5;
+        } else {
+          break;
+        }
+      }
 
-      ctx.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
+      // 1. Resize the canvas (This clears context state!)
+      canvas.width = finalWidth;
+      canvas.height = finalHeight;
+
+      // 2. Re-apply context styles AFTER resize
+      ctx.font = `${fontWeight} ${currentFontSize}px ${fontFamily}`;
       ctx.fillStyle = 'black';
-      ctx.textBaseline = 'top';
+      
+      // Keep the default 'alphabetic' baseline for exact bounding box alignment
+      ctx.textBaseline = 'alphabetic'; 
 
-      const renderX = visualLeft + paddingX;
-      const renderY = visualAscent;
+      // To map the exact visual box to (0,0):
+      renderX = textMetrics.actualBoundingBoxLeft; 
+      renderY = textMetrics.actualBoundingBoxAscent; 
       ctx.fillText(text, renderX, renderY);
 
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-
       return {
         pixels: Array.from(
           { length: imageData.data.length / 4 },
