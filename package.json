@@ -18,7 +18,9 @@
     "letter:serve": "nx serve letter",
     "letter:build": "nx build letter",
     "pipe:serve": "nx serve pipe",
-    "pipe:build": "nx build pipe"
+    "pipe:build": "nx build pipe",
+    "clone:serve": "nx serve clone",
+    "clone:build": "nx build clone"
   },
   "devDependencies": {
     "concurrently": "^10.0.3",

@@ -5,57 +5,109 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>pipe</title>
   <style>
-    body { margin: 0; font-family: system-ui, sans-serif; display: grid; place-items: center; min-height: 100vh; }
+    body {
+      background: black;
+      margin: 0;
+      font-family: system-ui, sans-serif;
+      display: grid;
+      place-items: center;
+      min-height: 100vh;
+    }
+
+    svg {
+      cursor: none;
+      outline: 1px solid black;
+      background: #CCCCCC;
+
+      .cursor {
+        fill: #b1d0db;
+        stroke: black;
+        stroke-width: 2px;
+        opacity: 0.6;
+
+        &:nth-last-child(1) {
+          fill: #3797ff;
+          opacity: 1;
+        }
+
+        &[data-click="true"] {
+          stroke: white;
+        }
+      }
+    }
   </style>
 </head>
 <body>
   <svg
-    width="1000"
-    height="1000"
-    viewBox="0 0 1000 1000"
+    width="400"
+    height="400"
+    viewBox="0 0 400 400"
     xmlns="http://www.w3.org/2000/svg"
     xmlns:xlink="http://www.w3.org/1999/xlink"
   >
+    <text id="frame" x="0" y="0" text-anchor="start" dominant-baseline="hanging"></text>
+    <g id="cursor-group"></g>
   </svg>
   <script>
-    const BASE_URL = new URL('.', location.href).pathname;
-
-    const size = 1000;
     const svg = document.querySelector('svg');
+    let frame = 0;
+    const repeatTime = 50;
+    const mouse = { x: 0, y: 0, click: false };
+    const cursors = [[]];
+    const cursorPath = 'M0 0L20 10L13 13L10 20Z';
 
-    const monster = {
-      x: 100,
-      parts: {
-        type: 'body',
-        children: [
-          { position: 0, child: { type: 'head', children: [] } },
-          { position: 1, child: { type: 'arm', children: [] } },
-          { position: 2, child: { type: 'arm', children: [] } },
-          { position: 3, child: { type: 'leg', children: [] } },
-          { position: 4, child: { type: 'leg', children: [] } }
-        ]
+    svg.setAttribute('width', window.innerWidth);
+    svg.setAttribute('height', window.innerHeight);
+    svg.setAttribute('viewBox', `0 0 ${window.innerWidth} ${window.innerHeight}`);
+
+    svg.addEventListener('mousemove', (event) => {
+      const newX = event.clientX - svg.getBoundingClientRect().left;
+      const newY = event.clientY - svg.getBoundingClientRect().top;
+      mouse.x = newX;
+      mouse.y = newY;
+    });
+    svg.addEventListener('mousedown', () => mouse.click = true);
+    svg.addEventListener('mouseup', () => mouse.click = false);
+
+    function runFrame() {
+      // Store current cursor
+      const currentCursor = cursors.at(-1);
+      currentCursor.push({ ...mouse });
+      frame++;
+
+      // Render
+      const cursorGroup = document.getElementById('cursor-group');
+      if (cursorGroup.children.length < cursors.length) {
+        const cursor = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        cursor.setAttribute('d', cursorPath);
+        cursor.classList.add('cursor');
+        cursorGroup.appendChild(cursor);
       }
-    };
-
-    function renderMonster(monster, parentElement) {
-      const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-      group.setAttribute('transform', `translate(${monster.x}, 0)`);
-      parentElement.appendChild(group);
-
-      const body = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-      body.setAttribute('x', -50);
-      body.setAttribute('y', 0);
-      body.setAttribute('width', 100);
-      body.setAttribute('height', 200);
-      body.setAttribute('fill', 'green');
-      group.appendChild(body);
-
-      monster.parts.children.forEach(part => {
-        renderMonster(part.child, group);
+      cursorGroup.childNodes.forEach((cursor, index) => {
+        const history = cursors[index];
+        if (history?.[frame - 1]) {
+          cursor.setAttribute('transform', `
+            translate(${history[frame - 1].x} ${history[frame - 1].y})
+          `);
+          cursor.setAttribute('data-click', history[frame - 1].click ? 'true' : 'false');
+        }
       });
+
+      document.getElementById('frame').innerHTML = `Frame: ${frame}`;
+
+      // If loop is complete, add new a new cursor
+      if (frame === repeatTime) {
+        frame = 0;
+        cursors.push([]);
+      }
+
+      // Repeat on next frame
+      requestAnimationFrame(runFrame);
     }
 
-    renderMonster(monster, svg);
+    requestAnimationFrame(runFrame);
+
+    // setInterval(() => runFrame(), 20);
   </script>
 </body>
 </html>
