@@ -1,23 +1,22 @@
-import { createSignal, For, Show } from 'solid-js';
-import type { WindowState } from './App';
+import { createSignal, For, Match, Show, Switch } from 'solid-js';
+import { TASKBAR_HEIGHT, type Panes, type WindowState } from './shell';
 import { BinPane } from './BinPane';
-import { embedUrl, resolve, type Toy } from './toys';
+import { SettingsPane } from './SettingsPane';
+import { AboutPane } from './AboutPane';
+import { embedUrl, resolve } from './toys';
 
 type Props = {
   win: WindowState;
   active: boolean;
-  binned: Toy[];
+  panes: Panes;
   onFocus: () => void;
   onClose: () => void;
   onMinimize: () => void;
   onToggleMaximize: () => void;
   onMove: (x: number, y: number) => void;
   onResize: (x: number, y: number, w: number, h: number) => void;
-  onRestore: (name: string) => void;
-  onEmptyBin: () => void;
 };
 
-const TASKBAR_HEIGHT = 40;
 export const MIN_W = 240;
 export const MIN_H = 160;
 
@@ -42,6 +41,8 @@ export function ToyWindow(props: Props) {
   let gesture: Gesture | null = null;
 
   const toy = () => (props.win.content.type === 'toy' ? props.win.content.toy : null);
+  const binDepth = () =>
+    props.win.content.type === 'bin' ? { depth: props.win.content.depth } : null;
   const src = () => {
     const t = toy();
     return t ? embedUrl(t.iframe ?? t.href ?? '') : '';
@@ -186,18 +187,21 @@ export function ToyWindow(props: Props) {
       </header>
 
       <div class="window-body" classList={{ 'is-interacting': interacting() }}>
-        <Show
-          when={props.win.content.type === 'toy'}
-          fallback={
-            <BinPane
-              binned={props.binned}
-              onRestore={props.onRestore}
-              onEmpty={props.onEmptyBin}
-            />
-          }
-        >
-          <iframe src={src()} title={props.win.title} />
-        </Show>
+        <Switch>
+          <Match when={props.win.content.type === 'toy'}>
+            <iframe src={src()} title={props.win.title} />
+          </Match>
+          {/* Wrapped in an object because depth 0 is falsy and would never match. */}
+          <Match when={binDepth()}>
+            {(bin) => <BinPane depth={bin().depth} panes={props.panes} />}
+          </Match>
+          <Match when={props.win.content.type === 'settings'}>
+            <SettingsPane panes={props.panes} />
+          </Match>
+          <Match when={props.win.content.type === 'about'}>
+            <AboutPane panes={props.panes} />
+          </Match>
+        </Switch>
       </div>
 
       <For each={EDGES}>

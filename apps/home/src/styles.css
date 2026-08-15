@@ -26,6 +26,9 @@ body {
   overflow: hidden;
   background: var(--desktop);
   -webkit-font-smoothing: antialiased;
+  /* Nothing on a desktop is selectable text — dragging draws a marquee instead. */
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 /* Classic raised / sunken bevels ------------------------------------------ */
@@ -74,6 +77,14 @@ body {
 .desktop-icons {
   position: absolute;
   inset: 0;
+  pointer-events: none;
+}
+
+/* Rubber-band selection rectangle. */
+.marquee {
+  position: absolute;
+  background: rgb(255 255 255 / 0.15);
+  border: 1px dotted #fff;
   pointer-events: none;
 }
 
@@ -131,24 +142,6 @@ body {
   color: #fff;
 }
 
-.icon-shortcut {
-  position: absolute;
-  left: 0;
-  bottom: 0;
-  width: 16px;
-  height: 16px;
-  display: grid;
-  place-items: center;
-  font-size: 12px;
-  font-weight: 700;
-  line-height: 1;
-  /* Own colour — .icon sets white text for the label, which would vanish here. */
-  color: #000;
-  text-shadow: none;
-  background: var(--face-light);
-  border: 1px solid var(--face-darker);
-}
-
 .icon-label {
   font-size: 12px;
   line-height: 1.25;
@@ -161,10 +154,21 @@ body {
   overflow: hidden;
 }
 
-/* The bin sits on the desktop itself, not in a coloured tile. */
-.icon.is-bin .icon-art {
+/* The bin and icon-shaped artwork sit on the desktop itself, not in a coloured tile. */
+.icon.is-bin .icon-art,
+.icon.is-bare .icon-art {
   background: none;
   border: none;
+}
+
+/* Show the whole icon rather than cropping it to fill the slot. */
+.icon.is-bare .icon-art img {
+  object-fit: contain;
+  filter: drop-shadow(1px 1px 1px rgb(0 0 0 / 0.5));
+}
+
+.icon.is-bare.is-selected .icon-art img {
+  filter: sepia(1) hue-rotate(190deg) saturate(2.5) drop-shadow(1px 1px 1px rgb(0 0 0 / 0.5));
 }
 
 .icon.is-bin .icon-glyph {
@@ -385,10 +389,209 @@ body {
 .bin-actions {
   flex: none;
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   padding: 6px;
   background: var(--face);
   border-top: 1px solid var(--face-dark);
+}
+
+.bin-status {
+  font-size: 12px;
+  color: #000;
+}
+
+.bin-actions .chrome-button[aria-disabled='true'] {
+  color: var(--face-dark);
+  text-shadow: 1px 1px 0 #fff;
+  cursor: default;
+}
+
+/* A nested bin is a container, not a toy — no tile behind its glyph. */
+.bin-row-art.is-glyph {
+  border: none;
+  background: none;
+  font-size: 20px;
+}
+
+/* Context menu ------------------------------------------------------------- */
+
+.context-menu {
+  position: fixed;
+  z-index: 20000;
+  min-width: 168px;
+  padding: 2px;
+  background: var(--face);
+  border: 2px solid;
+  border-color: var(--face-light) var(--face-darker) var(--face-darker) var(--face-light);
+  box-shadow: inset 1px 1px 0 #fff, inset -1px -1px 0 var(--face-dark), 2px 2px 4px rgb(0 0 0 / 0.3);
+}
+
+.context-item {
+  appearance: none;
+  width: 100%;
+  background: none;
+  border: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  padding: 5px 22px 5px 12px;
+  display: block;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.context-item:hover,
+.context-item:focus-visible {
+  background: #000080;
+  color: #fff;
+  outline: none;
+}
+
+.context-item[aria-disabled='true'] {
+  color: var(--face-dark);
+  text-shadow: 1px 1px 0 #fff;
+  cursor: default;
+}
+
+.context-item[aria-disabled='true']:hover {
+  background: none;
+  color: var(--face-dark);
+}
+
+.context-separator {
+  height: 0;
+  margin: 3px 4px;
+  border-top: 1px solid var(--face-dark);
+  border-bottom: 1px solid #fff;
+}
+
+/* Settings / About panes --------------------------------------------------- */
+
+.pane {
+  height: 100%;
+  overflow-y: auto;
+  padding: 12px;
+  background: var(--face);
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.field {
+  margin: 0;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--face-dark);
+  border-right-color: #fff;
+  border-bottom-color: #fff;
+}
+
+.field legend {
+  padding: 0 4px;
+}
+
+.swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(44px, 1fr));
+  gap: 6px;
+}
+
+.swatch {
+  appearance: none;
+  height: 34px;
+  cursor: pointer;
+  border: 2px solid;
+  border-color: var(--face-darker) var(--face-light) var(--face-light) var(--face-darker);
+}
+
+.swatch.is-active {
+  outline: 2px solid #000080;
+  outline-offset: 1px;
+}
+
+.field-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.field-row input[type='color'] {
+  width: 48px;
+  height: 26px;
+  padding: 0;
+  background: none;
+  border: 1px solid var(--face-dark);
+  cursor: pointer;
+}
+
+.field-row code {
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.pane-actions {
+  margin-top: auto;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.pane-actions .chrome-button {
+  height: 26px;
+  font-size: 12px;
+}
+
+.about-pane {
+  background: #fff;
+}
+
+.about-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.about-glyph {
+  font-size: 44px;
+  line-height: 1;
+  color: #feb03d;
+  text-shadow: 2px 2px 0 rgb(0 0 0 / 0.2);
+}
+
+.about-head h1 {
+  margin: 0;
+  font-family: var(--display-font);
+  font-size: 26px;
+  font-weight: 400;
+}
+
+.about-head p {
+  margin: 2px 0 0;
+  color: var(--face-dark);
+}
+
+.about-specs {
+  margin: 0;
+  padding: 10px 0 0;
+  border-top: 1px solid var(--face);
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 16px;
+}
+
+.about-specs dt {
+  color: var(--face-dark);
+}
+
+.about-specs dd {
+  margin: 0;
+}
+
+.about-foot {
+  margin: auto 0 0;
+  font-size: 11px;
+  color: var(--face-dark);
 }
 
 /* Resize grips ------------------------------------------------------------- */
@@ -548,6 +751,7 @@ body {
 
 .start-item {
   appearance: none;
+  white-space: nowrap;
   width: 100%;
   background: none;
   border: none;
@@ -660,5 +864,76 @@ body {
   }
   .task-art {
     margin-right: 0;
+  }
+}
+
+/* Power off / boot splash -------------------------------------------------- */
+
+/* Sits above the taskbar, and swallows every click aimed at the dead desktop. */
+.power-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 20000;
+  background: #000;
+  display: grid;
+  place-items: center;
+  cursor: default;
+}
+
+.boot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  color: #fff;
+}
+
+.boot-logo {
+  font-family: var(--display-font);
+  font-size: 52px;
+  line-height: 1;
+  text-shadow: 3px 3px 0 #000080;
+}
+
+.boot-logo-year {
+  color: #1084d0;
+  margin-left: 8px;
+}
+
+/* A sunken well, the way a Windows progress bar is drawn. */
+.boot-bar {
+  width: 260px;
+  height: 22px;
+  padding: 2px;
+  background: var(--face);
+  border: 2px solid;
+  border-color: var(--face-darker) var(--face-light) var(--face-light) var(--face-darker);
+}
+
+/* Chunky segments rather than a smooth fill — the blocks arrive one at a time as
+   the width animates, which is what sells it as a 95-era bar. */
+.boot-bar-fill {
+  height: 100%;
+  width: 0;
+  background: repeating-linear-gradient(90deg, #000080 0 12px, transparent 12px 15px);
+  animation: boot-load linear forwards;
+}
+
+@keyframes boot-load {
+  to {
+    width: 100%;
+  }
+}
+
+.boot-hint {
+  margin: 0;
+  font-size: 13px;
+  opacity: 0.75;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .boot-bar-fill {
+    animation: none;
+    width: 100%;
   }
 }

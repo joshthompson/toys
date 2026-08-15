@@ -8,8 +8,13 @@ export type Toy = {
    * Either way it opens in a window on the desktop.
    */
   href: string | null;
-  /** Icon / window artwork. Falls back to a generic icon when absent. */
+  /** Icon / window artwork, drawn in a coloured tile. Falls back to a generic icon when absent. */
   image?: string;
+  /**
+   * Transparent icon artwork, used instead of `image`. Sits straight on the
+   * desktop — no tile, no crop — for things that are already icon-shaped.
+   */
+  icon?: string;
   /** Override the URL loaded inside the window (defaults to `href`). */
   iframe?: string;
 };
@@ -47,7 +52,15 @@ export const toys: Toy[] = [
     href: 'https://joshthompson.github.io/dino-game/',
     image: '/images/dino-game.png',
   },
+  {
+    name: `Josh's CV.doc`,
+    href: 'https://joshthompson.github.io/',
+    icon: '/images/pdf.png',
+  },
 ];
+
+/** A toy's artwork, whichever kind it has. */
+export const artwork = (toy: Toy) => toy.image ?? toy.icon;
 
 /** True for toys hosted in another repo. They still open in a window, just from another origin. */
 export const isExternal = (href: string) => /^https?:\/\//.test(href);

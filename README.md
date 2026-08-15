@@ -20,23 +20,57 @@ needs) and a `project.json` describing how to serve and build it.
 
 The `home` app is the exception: it's a [Solid](https://solidjs.com) + Vite app
 that renders a little desktop. Icons drag anywhere, double-click to open a
-draggable and resizable window (single tap on touch), and there's a Recycle Bin
-you can drag toys onto — binned toys vanish from the desktop and the Start menu
-and can't be opened. Open the bin to put them back, or empty it to lose them for
-the session. None of that persists: a reload puts everything back.
+draggable and resizable window (single tap on touch), and right-click is
+Josh OS's, not the browser's:
+
+- **on an icon** — Open, Open externally, Delete
+- **on the desktop** — Arrange Icons, Desktop Settings, About Josh OS
+- **anywhere else** — the browser menu is suppressed, no menu shown
+
+Deleting a toy (or dragging it onto the bin) hides it from the desktop and the
+Start menu and makes it unopenable. Open the bin to put it back, or empty that
+level to lose it for the session. None of this persists — a reload restores
+everything.
+
+### The bin that eats bins
+
+Delete the Recycle Bin itself and it isn't destroyed: a new **Recycle Bin Bin**
+appears containing it, and every further delete adds another ` Bin`. Only the
+outermost bin sits on the desktop; the rest nest inside it, each keeping its own
+contents. A toy binned before three nestings is still sitting in the original
+Recycle Bin three levels down, and its **Put back** still returns it to the
+desktop.
+
+That's modelled as a stack in [App.tsx](apps/home/src/App.tsx) — `bins[0]` is the
+original Recycle Bin and deleting pushes a new empty level, so no level ever has
+to be rewritten:
+
+```ts
+const deleteBin = () => setBins(bins.length, { toys: [] });
+```
 
 ```
 apps/home/
   index.html          → the Vite entry shell
   public/images/      → toy artwork, copied verbatim to dist/images/
   src/toys.ts         → THE TOY LIST — add new toys here
+  src/shell.ts        → shared constants + types (a leaf module, see below)
   src/App.tsx         → desktop, window + icon + bin state
   src/ToyWindow.tsx   → a draggable, resizable window
   src/Taskbar.tsx     → Start menu, task buttons, clock
   src/DesktopIcon.tsx → a draggable desktop icon
-  src/BinPane.tsx     → what's inside the Recycle Bin window
+  src/ContextMenu.tsx → the right-click menu
+  src/BinPane.tsx     → inside a Recycle Bin window
+  src/SettingsPane.tsx→ inside the Desktop Settings window
+  src/AboutPane.tsx   → inside the About window
   src/styles.css      → the whole look
 ```
+
+`shell.ts` imports nothing but types and exists to break a cycle: `App` imports
+the panes, and the panes need shared constants. Importing those back from `App`
+made a loop, and a pane reading one at module scope (`SettingsPane`'s swatch
+list) hit the temporal dead zone and crashed the app at boot. Shared values go in
+`shell.ts`, never in `App.tsx`.
 
 It's built with `base: './'` so the exact same output works at `/` locally and
 at `/toys/` on GitHub Pages. `pnpm home:build` typechecks first, bundles into a

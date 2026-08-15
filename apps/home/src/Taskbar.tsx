@@ -1,16 +1,31 @@
 import { createSignal, createEffect, onCleanup, For, Show } from 'solid-js';
-import { BIN_GLYPH, BIN_TITLE, type WindowState } from './App';
-import { isExternal, resolve, type Toy } from './toys';
+import { BIN_GLYPH, type WindowState } from './shell';
+import { artwork, isExternal, resolve, type Toy } from './toys';
 
 type Props = {
   windows: WindowState[];
   toys: Toy[];
+  binName: string;
   binCount: number;
   onLaunch: (toy: Toy) => void;
   onOpenBin: () => void;
   onTaskClick: (id: number) => void;
+  onShutDown: () => void;
+  onRestart: () => void;
+  onFactoryReset: () => void;
   taskbarHeight: number;
 };
+
+/** Start menu power items. Shut Down sits at the bottom, nearest the Start button. */
+const POWER_ITEMS = [
+  { label: 'Return to Factory Settings', glyph: '☢️', key: 'onFactoryReset' },
+  { label: 'Restart', glyph: '🔄', key: 'onRestart' },
+  { label: 'Shut Down', glyph: '⏻', key: 'onShutDown' },
+] as const;
+
+/** Task button art for the windows that aren't toys. */
+const glyphFor = (win: WindowState) =>
+  win.content.type === 'bin' ? BIN_GLYPH : win.content.type === 'settings' ? '⚙️' : '★';
 
 const formatTime = (d: Date) =>
   d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).toUpperCase();
@@ -71,14 +86,14 @@ export function Taskbar(props: Props) {
                       onClick={() => toy.href && run(() => props.onLaunch(toy))}
                     >
                       <Show
-                        when={toy.image}
+                        when={artwork(toy)}
                         fallback={
                           <span class="start-item-art" aria-hidden="true">
                             ★
                           </span>
                         }
                       >
-                        <img class="start-item-art" src={resolve(toy.image!)} alt="" />
+                        <img class="start-item-art" src={resolve(artwork(toy)!)} alt="" />
                       </Show>
                       {toy.name}
                       <Show when={toy.href && isExternal(toy.href)}>
@@ -93,7 +108,10 @@ export function Taskbar(props: Props) {
                   </li>
                 )}
               </For>
-              <li class="start-separator" role="separator" />
+              {/* Bin every toy and the list above this vanishes — so does its divider. */}
+              <Show when={props.toys.length}>
+                <li class="start-separator" role="separator" />
+              </Show>
               <li>
                 <button
                   role="menuitem"
@@ -103,12 +121,30 @@ export function Taskbar(props: Props) {
                   <span class="start-item-art is-glyph" aria-hidden="true">
                     {BIN_GLYPH}
                   </span>
-                  {BIN_TITLE}
+                  {props.binName}
                   <Show when={props.binCount}>
                     <span class="start-item-hint">{props.binCount}</span>
                   </Show>
                 </button>
               </li>
+
+              <li class="start-separator" role="separator" />
+              <For each={POWER_ITEMS}>
+                {(item) => (
+                  <li>
+                    <button
+                      role="menuitem"
+                      class="start-item"
+                      onClick={() => run(props[item.key])}
+                    >
+                      <span class="start-item-art is-glyph" aria-hidden="true">
+                        {item.glyph}
+                      </span>
+                      {item.label}
+                    </button>
+                  </li>
+                )}
+              </For>
             </ul>
           </div>
         </Show>
@@ -123,10 +159,10 @@ export function Taskbar(props: Props) {
               onClick={() => props.onTaskClick(win.id)}
             >
               <Show
-                when={win.content.type === 'toy' && win.content.toy.image}
+                when={win.content.type === 'toy' && artwork(win.content.toy)}
                 fallback={
                   <span class="task-art is-glyph" aria-hidden="true">
-                    {BIN_GLYPH}
+                    {glyphFor(win)}
                   </span>
                 }
               >

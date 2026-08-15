@@ -2,11 +2,12 @@ import { createSignal, Show } from 'solid-js';
 import { colours } from './toys';
 
 type Props = {
-  iconKey: string;
   label: string;
   position: { x: number; y: number };
   selected: boolean;
   image?: string;
+  /** Draw the image as artwork on the desktop rather than inside a coloured tile. */
+  bare?: boolean;
   glyph?: string;
   colour?: number;
   disabled?: boolean;
@@ -20,6 +21,7 @@ type Props = {
   onMove: (x: number, y: number) => void;
   onDragOverBin?: (over: boolean) => void;
   onDropInBin?: () => void;
+  onContextMenu: (x: number, y: number) => void;
 };
 
 /** Touch has no double-click, so a single tap opens there. */
@@ -54,6 +56,8 @@ export function DesktopIcon(props: Props) {
 
   const onPointerDown = (e: PointerEvent & { currentTarget: HTMLElement }) => {
     props.onSelect();
+    // Right-click selects and opens the menu; only the primary button drags.
+    if (e.button !== 0) return;
     origin = { px: e.clientX, py: e.clientY, x: props.position.x, y: props.position.y };
     moved = false;
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -92,6 +96,7 @@ export function DesktopIcon(props: Props) {
       classList={{
         'is-selected': props.selected,
         'is-dragging': dragging(),
+        'is-bare': props.bare,
         'is-bin': props.isBin,
         'is-drop-target': props.dropTarget,
       }}
@@ -106,6 +111,12 @@ export function DesktopIcon(props: Props) {
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerCancel}
+      onContextMenu={(e) => {
+        // Stop it reaching the desktop, which would show the desktop menu instead.
+        e.preventDefault();
+        e.stopPropagation();
+        props.onContextMenu(e.clientX, e.clientY);
+      }}
       onClick={() => !moved && isTouch() && open()}
       onDblClick={() => !moved && open()}
       onKeyDown={(e) => {
@@ -118,11 +129,6 @@ export function DesktopIcon(props: Props) {
       <span class="icon-art">
         <Show when={props.image} fallback={<span class="icon-glyph">{props.glyph ?? '★'}</span>}>
           <img src={props.image} alt="" draggable={false} />
-        </Show>
-        <Show when={props.external}>
-          <span class="icon-shortcut" aria-hidden="true">
-            ↗
-          </span>
         </Show>
         <Show when={props.binCount}>
           <span class="icon-count">{props.binCount}</span>
