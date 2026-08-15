@@ -32,8 +32,16 @@ writeFileSync(join(dir, 'index.html'), `<!doctype html>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${display}</title>
+  <script>
+    // The home page frames every toy with '#embedded'. Set the flag before first
+    // paint so the windowed layout doesn't flash the full-page one.
+    if (location.hash === '#embedded') document.documentElement.classList.add('embedded');
+  </script>
   <style>
     body { margin: 0; font-family: system-ui, sans-serif; display: grid; place-items: center; min-height: 100vh; }
+
+    /* Shown in a window on the home desktop — drop the page chrome and tighten up. */
+    .embedded h1 { font-size: 1.2rem; }
   </style>
 </head>
 <body>
@@ -83,4 +91,4 @@ console.log(`✓ Added "${name}:serve" and "${name}:build" scripts`);
 console.log('');
 console.log('Next steps:');
 console.log(`  • pnpm ${name}:serve            # dev server`);
-console.log(`  • Add it to the toy list in apps/home/index.html ({ name: '${display}', href: '${name}/' })`);
+console.log(`  • Add it to the toy list in apps/home/src/toys.ts ({ name: '${display}', href: '${name}/' })`);

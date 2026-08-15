@@ -10,13 +10,59 @@ sub-path, e.g. `/toys/leek/` and `/toys/textog/`.
 
 ```
 apps/
-  home/      → the landing page,            builds to  dist/
+  home/      → the landing page (Solid),     builds to  dist/
   leek/      → a toy,                        builds to  dist/leek/
   textog/    → a toy,                        builds to  dist/textog/
 ```
 
 A toy is just a folder with an `index.html` (plus any images / css / js it
 needs) and a `project.json` describing how to serve and build it.
+
+The `home` app is the exception: it's a [Solid](https://solidjs.com) + Vite app
+that renders a little desktop. Icons drag anywhere, double-click to open a
+draggable and resizable window (single tap on touch), and there's a Recycle Bin
+you can drag toys onto — binned toys vanish from the desktop and the Start menu
+and can't be opened. Open the bin to put them back, or empty it to lose them for
+the session. None of that persists: a reload puts everything back.
+
+```
+apps/home/
+  index.html          → the Vite entry shell
+  public/images/      → toy artwork, copied verbatim to dist/images/
+  src/toys.ts         → THE TOY LIST — add new toys here
+  src/App.tsx         → desktop, window + icon + bin state
+  src/ToyWindow.tsx   → a draggable, resizable window
+  src/Taskbar.tsx     → Start menu, task buttons, clock
+  src/DesktopIcon.tsx → a draggable desktop icon
+  src/BinPane.tsx     → what's inside the Recycle Bin window
+  src/styles.css      → the whole look
+```
+
+It's built with `base: './'` so the exact same output works at `/` locally and
+at `/toys/` on GitHub Pages. `pnpm home:build` typechecks first, bundles into a
+staging dir, then syncs into `dist/` — it never empties `dist/`, so it can't
+clobber the other toys' output.
+
+## The `#embedded` hash
+
+Every toy is framed as `<toy-url>#embedded`. A toy can check for that hash and
+lay itself out for a small window — hide its own header, shrink margins, skip
+the intro, whatever suits it:
+
+```html
+<!-- in <head>, before any CSS, so the windowed layout doesn't flash -->
+<script>
+  if (location.hash === '#embedded') document.documentElement.classList.add('embedded');
+</script>
+<style>
+  header { display: block; }
+  .embedded header { display: none; }
+</style>
+```
+
+`pnpm new-toy` scaffolds this hook for you. Toys that ignore the hash still work
+fine — they just render their full-page layout in the window. Every window also
+has an **↗** button to open the toy full-page in a new tab.
 
 ## Commands
 
@@ -48,7 +94,14 @@ pnpm new-toy spirograph "Spirograph"
 
 This scaffolds `apps/spirograph/`, registers `spirograph:serve` /
 `spirograph:build`, then add it to the list in
-[`apps/home/index.html`](apps/home/index.html).
+[`apps/home/src/toys.ts`](apps/home/src/toys.ts):
+
+```ts
+{ name: 'Spirograph', href: 'spirograph/', image: '/images/spirograph.png' }
+```
+
+Drop the artwork in [`apps/home/public/images/`](apps/home/public/images/).
+`href: null` renders a greyed-out "coming soon" icon.
 
 ### Two kinds of toy
 
@@ -71,8 +124,13 @@ This scaffolds `apps/spirograph/`, registers `spirograph:serve` /
 ### Externally-hosted toys
 
 Some toys live in their own repos. Don't add an `apps/` folder for those — just
-add an entry to the list in [`apps/home/index.html`](apps/home/index.html) with
-a full `https://…` URL as the `href`.
+add an entry to the list in [`apps/home/src/toys.ts`](apps/home/src/toys.ts)
+with a full `https://…` URL as the `href`. They get a shortcut badge on their
+icon but otherwise behave the same, framed in a window like any other toy.
+
+That relies on the other origin allowing itself to be framed. If a toy ever
+starts sending `X-Frame-Options` or a `frame-ancestors` CSP, its window will
+come up blank — the **↗** button is the way out.
 
 ## Deployment
 

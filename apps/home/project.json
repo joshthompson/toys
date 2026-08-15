@@ -2,8 +2,8 @@
   "name": "home",
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "projectType": "application",
-  "sourceRoot": "apps/home",
-  "tags": ["type:static"],
+  "sourceRoot": "apps/home/src",
+  "tags": ["type:framework"],
   "targets": {
     "serve": {
       "executor": "nx:run-commands",
@@ -11,13 +11,29 @@
         "command": "vite apps/home --open"
       }
     },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "apps/home",
+        "command": "tsc --noEmit"
+      }
+    },
     "build": {
       "executor": "nx:run-commands",
-      "outputs": ["{workspaceRoot}/dist/index.html", "{workspaceRoot}/dist/404.html"],
+      "dependsOn": ["^build", "typecheck"],
+      "outputs": [
+        "{workspaceRoot}/dist/index.html",
+        "{workspaceRoot}/dist/404.html",
+        "{workspaceRoot}/dist/assets",
+        "{workspaceRoot}/dist/images"
+      ],
       "options": {
         "parallel": false,
         "commands": [
-          "rsync -a --exclude=project.json --exclude=.DS_Store apps/home/ dist/",
+          "vite build apps/home --outDir ../../dist/.home --emptyOutDir",
+          "rm -rf dist/assets dist/images dist/index.html dist/404.html",
+          "rsync -a dist/.home/ dist/",
+          "rm -rf dist/.home",
           "cp dist/index.html dist/404.html"
         ]
       }
