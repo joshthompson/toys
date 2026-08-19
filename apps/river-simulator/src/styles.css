@@ -1,0 +1,207 @@
+body {
+  margin: 0;
+  overflow: hidden;
+  background: #071018;
+  color: #cfe6ee;
+  font-family: system-ui, sans-serif;
+}
+
+/*
+ * Set while a landscape is being kept at a size larger than the window, so the rest of it
+ * can be scrolled to. The map always sits at the top left, so a bigger window simply leaves
+ * the background showing around it.
+ */
+html.scrolls {
+  overflow: auto;
+}
+
+/* The clipping lives on the body, so that is what has to give — putting `auto` on both makes
+   the body its own scroll container and the page as a whole then refuses to scroll at all. */
+html.scrolls body {
+  overflow: visible;
+}
+
+canvas {
+  display: block;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.hud {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  /* Wraps rather than overflowing, so a narrow window stacks the bar instead of cutting the
+     controls off the right-hand end. */
+  flex-wrap: wrap;
+  column-gap: 16px;
+  row-gap: 6px;
+  padding: 9px 14px;
+  font-size: 13px;
+  background: rgb(7 16 24 / 0.72);
+  backdrop-filter: blur(4px);
+}
+
+.hud b {
+  color: #7fd8ff;
+  font-weight: 600;
+}
+
+.hud .stat {
+  color: #8ea9b6;
+  font-variant-numeric: tabular-nums;
+}
+
+.hud .buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  /* Keeps the controls hard right on a wide bar, and lets them wrap as one group. */
+  margin-left: auto;
+}
+
+.hud .tools {
+  display: flex;
+  gap: 4px;
+}
+
+.hud .tools button.active {
+  color: #071018;
+  background: #7fd8ff;
+  border-color: #7fd8ff;
+  font-weight: 600;
+}
+
+.hud button {
+  font: inherit;
+  white-space: nowrap;
+  color: inherit;
+  padding: 4px 12px;
+  background: #14313a;
+  border: 1px solid #2f5d68;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.hud button:hover,
+.hud select:hover {
+  background: #1d4550;
+}
+
+.hud select {
+  font: inherit;
+  color: inherit;
+  padding: 4px 8px;
+  background: #14313a;
+  border: 1px solid #2f5d68;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+/* Shown only when the frames can't keep up with the chosen speed. */
+.hud .throttled b {
+  color: #ffc46b;
+}
+
+/*
+ * Narrow windows drop the wordier parts of the bar before anything starts wrapping: first the
+ * secondary readouts, then the hints, so the controls always stay reachable.
+ */
+@media (max-width: 940px) {
+  .hud .wide {
+    display: none;
+  }
+}
+
+@media (max-width: 660px) {
+  .hud {
+    column-gap: 10px;
+    padding: 8px 10px;
+  }
+
+  .hud .hint {
+    display: none;
+  }
+
+  .hud button,
+  .hud select {
+    padding: 4px 8px;
+  }
+}
+
+/* The question asked when the window has been resized. */
+.ask {
+  position: fixed;
+  left: 50%;
+  top: 24px;
+  transform: translateX(-50%);
+  max-width: min(420px, calc(100vw - 32px));
+  padding: 14px 16px;
+  font-size: 13px;
+  line-height: 1.45;
+  background: rgb(9 22 31 / 0.94);
+  border: 1px solid #2f5d68;
+  border-radius: 6px;
+  box-shadow: 0 8px 28px rgb(0 0 0 / 0.45);
+  backdrop-filter: blur(4px);
+}
+
+.ask p {
+  margin: 0 0 12px;
+}
+
+.ask-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.ask button {
+  font: inherit;
+  white-space: nowrap;
+  color: inherit;
+  padding: 5px 12px;
+  background: #14313a;
+  border: 1px solid #2f5d68;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.ask button:first-child {
+  color: #071018;
+  background: #7fd8ff;
+  border-color: #7fd8ff;
+  font-weight: 600;
+}
+
+.ask button:hover {
+  background: #1d4550;
+}
+
+.ask button:first-child:hover {
+  background: #a2e4ff;
+}
+
+/* Shown in a window on the home desktop — tighten the chrome right down. */
+.embedded .hud {
+  gap: 8px;
+  padding: 5px 8px;
+  font-size: 11px;
+}
+
+.embedded .hud .wide,
+.embedded .hud .hint {
+  display: none;
+}
+
+.embedded .ask {
+  top: 10px;
+  font-size: 12px;
+  padding: 10px 12px;
+}
+
+.embedded .hud button {
+  padding: 2px 7px;
+}

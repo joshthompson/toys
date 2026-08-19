@@ -1,0 +1,36 @@
+{
+  "name": "river-simulator",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "sourceRoot": "apps/river-simulator/src",
+  "tags": [
+    "type:framework"
+  ],
+  "targets": {
+    "serve": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "vite apps/river-simulator --open"
+      }
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "apps/river-simulator",
+        "command": "tsc --noEmit"
+      }
+    },
+    "build": {
+      "executor": "nx:run-commands",
+      "dependsOn": [
+        "typecheck"
+      ],
+      "outputs": [
+        "{workspaceRoot}/dist/river-simulator"
+      ],
+      "options": {
+        "command": "vite build apps/river-simulator --outDir ../../dist/river-simulator --emptyOutDir"
+      }
+    }
+  }
+}

@@ -53,7 +53,12 @@ export const toys: Toy[] = [
     image: '/images/dino-game.png',
   },
   {
-    name: `Josh's CV.doc`,
+    name: 'River Simulator',
+    href: 'river-simulator/',
+    image: '/images/river-simulator.png',
+  },
+  {
+    name: `Me.doc`,
     href: 'https://joshthompson.github.io/',
     icon: '/images/pdf.png',
   },

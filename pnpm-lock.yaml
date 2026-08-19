@@ -34,6 +34,22 @@ importers:
         specifier: ^2.11.9
         version: 2.11.14(solid-js@1.9.14)(vite@6.4.3(yaml@2.9.0))
 
+  apps/river-simulator:
+    dependencies:
+      solid-js:
+        specifier: ^1.9.9
+        version: 1.9.14
+    devDependencies:
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vite:
+        specifier: ^6.0.0
+        version: 6.4.3(yaml@2.9.0)
+      vite-plugin-solid:
+        specifier: ^2.11.9
+        version: 2.11.14(solid-js@1.9.14)(vite@6.4.3(yaml@2.9.0))
+
 packages:
 
   '@babel/code-frame@7.29.7':

@@ -20,7 +20,9 @@
     "pipe:serve": "nx serve pipe",
     "pipe:build": "nx build pipe",
     "clone:serve": "nx serve clone",
-    "clone:build": "nx build clone"
+    "clone:build": "nx build clone",
+    "river-simulator:serve": "nx serve river-simulator",
+    "river-simulator:build": "nx build river-simulator"
   },
   "devDependencies": {
     "concurrently": "^10.0.3",
