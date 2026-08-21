@@ -2,13 +2,30 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <!--
+    A /screensaver/<id> URL has no file behind it: the host answers with this page from
+    the site root, but from a deeper address, so the relative asset paths further down
+    would look for the bundle inside the route. Anchor them back at the root first.
+    This has to sit above the script it's fixing, since the browser resolves each src
+    as it reaches it.
+  -->
+  <script>
+    {
+      const route = location.pathname.indexOf('/screensaver/');
+      if (route >= 0) {
+        const base = document.createElement('base');
+        base.href = location.pathname.slice(0, route + 1);
+        document.head.append(base);
+      }
+    }
+  </script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Love+Ya+Like+A+Sister&display=swap" rel="stylesheet">
   <title>Josh OS '95</title>
-  <script type="module" crossorigin src="./assets/index-Cj4roeqU.js"></script>
-  <link rel="stylesheet" crossorigin href="./assets/index-5EJV3pj-.css">
+  <script type="module" crossorigin src="./assets/index-BZu52h1p.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-DDfRXbus.css">
 </head>
 <body>
   <div id="root"></div>
