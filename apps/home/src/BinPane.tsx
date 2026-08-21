@@ -54,7 +54,7 @@ export function BinPane(props: Props) {
                     </span>
                   }
                 >
-                  <img class="bin-row-art" src={resolve(artwork(toy)!)} alt="" />
+                  <img class="bin-row-art" classList={{ 'is-bare': !!toy.icon }} src={resolve(artwork(toy)!)} alt="" />
                 </Show>
                 <span class="bin-row-name">{toy.name}</span>
                 <button class="chrome-button" onClick={() => props.panes.restore(toy.name)}>

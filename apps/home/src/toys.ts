@@ -58,9 +58,14 @@ export const toys: Toy[] = [
     image: '/images/river-simulator.png',
   },
   {
+    name: 'Scoop Bus Game',
+    href: 'https://scoopbus.run/game',
+    image: '/images/scoop-bus-game.png',
+  },
+  {
     name: `Me.doc`,
     href: 'https://joshthompson.github.io/',
-    icon: '/images/pdf.png',
+    icon: '/images/me.png',
   },
 ];
 

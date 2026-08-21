@@ -1,9 +1,9 @@
 /**
  * The bits of the desktop that outlive a reload: where the icons sit, what's been
- * binned or emptied, and the wallpaper colour. Everything else — open windows, the
+ * binned or emptied, and the desktop settings. Everything else — open windows, the
  * current selection — is session state and comes back fresh on restart.
  */
-import type { Point } from './shell';
+import type { IconSize, Point } from './shell';
 
 const KEY = 'josh-os';
 
@@ -15,6 +15,9 @@ export type Saved = {
   bins: { toys: string[] }[];
   purged: string[];
   colour: string;
+  iconSize: IconSize;
+  /** A screensaver id, or NO_SCREENSAVER. Validated against the registry on the way in. */
+  screensaver: string;
 };
 
 /** Whatever was saved last, or nothing at all — every field is treated as optional on the way in. */

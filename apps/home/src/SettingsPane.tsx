@@ -1,5 +1,12 @@
 import { For } from 'solid-js';
-import { DEFAULT_DESKTOP, type Panes } from './shell';
+import {
+  DEFAULT_DESKTOP,
+  DEFAULT_ICON_SIZE,
+  ICON_SIZE_OPTIONS,
+  isIconSize,
+  type Panes,
+} from './shell';
+import { NO_SCREENSAVER, SCREENSAVERS } from './screensavers';
 
 const SWATCHES = [
   { name: 'Teal', value: DEFAULT_DESKTOP },
@@ -13,6 +20,12 @@ const SWATCHES = [
 ];
 
 export function SettingsPane(props: { panes: Panes }) {
+  const restoreDefaults = () => {
+    props.panes.setColour(DEFAULT_DESKTOP);
+    props.panes.setIconSize(DEFAULT_ICON_SIZE);
+    props.panes.setScreensaver(NO_SCREENSAVER);
+  };
+
   return (
     <div class="pane">
       <fieldset class="field">
@@ -44,12 +57,47 @@ export function SettingsPane(props: { panes: Panes }) {
         <code>{props.panes.colour()}</code>
       </label>
 
-      <footer class="pane-actions">
+      <label class="field-row">
+        Icon size
+        <select
+          class="chrome-select"
+          value={props.panes.iconSize()}
+          onChange={(e) => {
+            // The value can only be one of the options, but narrow it rather than cast.
+            if (isIconSize(e.currentTarget.value)) props.panes.setIconSize(e.currentTarget.value);
+          }}
+        >
+          <For each={ICON_SIZE_OPTIONS}>
+            {(option) => <option value={option.value}>{option.name}</option>}
+          </For>
+        </select>
+      </label>
+
+      <label class="field-row">
+        Screensaver
+        <select
+          class="chrome-select"
+          value={props.panes.screensaver()}
+          onChange={(e) => props.panes.setScreensaver(e.currentTarget.value)}
+        >
+          <option value={NO_SCREENSAVER}>No Screensaver</option>
+          <For each={SCREENSAVERS}>{(saver) => <option value={saver.id}>{saver.name}</option>}</For>
+        </select>
         <button
           class="chrome-button"
-          onClick={() => props.panes.setColour(DEFAULT_DESKTOP)}
+          aria-disabled={props.panes.screensaver() === NO_SCREENSAVER}
+          onClick={() =>
+            props.panes.screensaver() !== NO_SCREENSAVER && props.panes.previewScreensaver()
+          }
         >
-          Restore default
+          Preview
+        </button>
+      </label>
+      <p class="field-hint">Starts on its own after a minute of nothing happening.</p>
+
+      <footer class="pane-actions">
+        <button class="chrome-button" onClick={restoreDefaults}>
+          Restore defaults
         </button>
       </footer>
     </div>

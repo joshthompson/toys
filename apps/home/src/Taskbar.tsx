@@ -93,7 +93,7 @@ export function Taskbar(props: Props) {
                           </span>
                         }
                       >
-                        <img class="start-item-art" src={resolve(artwork(toy)!)} alt="" />
+                        <img class="start-item-art" classList={{ 'is-bare': !!toy.icon }} src={resolve(artwork(toy)!)} alt="" />
                       </Show>
                       {toy.name}
                       <Show when={toy.href && isExternal(toy.href)}>
@@ -166,7 +166,14 @@ export function Taskbar(props: Props) {
                   </span>
                 }
               >
-                {(image) => <img class="task-art" src={resolve(image())} alt="" />}
+                {(image) => (
+                  <img
+                    class="task-art"
+                    classList={{ 'is-bare': win.content.type === 'toy' && !!win.content.toy.icon }}
+                    src={resolve(image())}
+                    alt=""
+                  />
+                )}
               </Show>
               {win.title}
             </button>

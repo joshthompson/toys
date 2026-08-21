@@ -13,6 +13,31 @@ export const BIN_GLYPH = '🗑️';
 export const DEFAULT_DESKTOP = '#3c8585';
 export const TASKBAR_HEIGHT = 40;
 
+/** How big the desktop icons are drawn. */
+export type IconSize = 'small' | 'medium' | 'large';
+
+export const DEFAULT_ICON_SIZE: IconSize = 'medium';
+
+/**
+ * Geometry per icon size. `slot` is the whole icon — the box the layout grid, the
+ * drag clamps and the marquee hit tests all work in — and `art` is the square tile
+ * inside it. The CSS reads all three off custom properties on the desktop.
+ */
+export const ICON_METRICS: Record<IconSize, { slot: { w: number; h: number }; art: number; label: number }> = {
+  small: { slot: { w: 72, h: 84 }, art: 40, label: 11 },
+  medium: { slot: { w: 88, h: 96 }, art: 52, label: 12 },
+  large: { slot: { w: 112, h: 126 }, art: 72, label: 14 },
+};
+
+/** The icon size dropdown, in order. */
+export const ICON_SIZE_OPTIONS: { value: IconSize; name: string }[] = [
+  { value: 'small', name: 'Small' },
+  { value: 'medium', name: 'Medium (Default)' },
+  { value: 'large', name: 'Large' },
+];
+
+export const isIconSize = (v: unknown): v is IconSize => v === 'small' || v === 'medium' || v === 'large';
+
 /** 'Recycle Bin', 'Recycle Bin Bin', 'Recycle Bin Bin Bin', … */
 export const binName = (depth: number) => `Recycle Bin${' Bin'.repeat(depth)}`;
 
@@ -59,5 +84,12 @@ export type Panes = {
   emptyLevel: (depth: number) => void;
   colour: () => string;
   setColour: (colour: string) => void;
+  iconSize: () => IconSize;
+  setIconSize: (size: IconSize) => void;
+  /** A screensaver id from the registry in ./screensavers, or NO_SCREENSAVER. */
+  screensaver: () => string;
+  setScreensaver: (id: string) => void;
+  /** Hand the screen to the chosen screensaver now, without waiting to go idle. */
+  previewScreensaver: () => void;
   toyCount: () => number;
 };

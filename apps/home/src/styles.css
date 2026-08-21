@@ -70,6 +70,12 @@ body {
   height: 100dvh;
   background: var(--desktop);
   overflow: hidden;
+  /* Icon geometry. App overrides these per the icon size setting; the values here
+     are the medium default, so the stylesheet still stands on its own. */
+  --icon-slot-w: 88px;
+  --icon-slot-h: 96px;
+  --icon-art: 52px;
+  --icon-label: 12px;
 }
 
 /* Icons are positioned freely and drag around, so the layer is just a
@@ -96,8 +102,8 @@ body {
   border: none;
   font: inherit;
   color: #fff;
-  width: 88px;
-  height: 96px;
+  width: var(--icon-slot-w);
+  height: var(--icon-slot-h);
   padding: 6px 2px;
   display: flex;
   flex-direction: column;
@@ -120,8 +126,8 @@ body {
 
 .icon-art {
   position: relative;
-  width: 52px;
-  height: 52px;
+  width: var(--icon-art);
+  height: var(--icon-art);
   display: grid;
   place-items: center;
   background: var(--icon-colour, #5066e0);
@@ -133,17 +139,23 @@ body {
 .icon-art img {
   width: 100%;
   height: 100%;
+  /* A grid item's automatic minimum size is content-based, which would push artwork
+     taller than it is wide past the slot and out of centre. Nothing here should
+     outgrow the slot, so opt out of that minimum. */
+  min-width: 0;
+  min-height: 0;
   object-fit: cover;
   image-rendering: auto;
 }
 
 .icon-glyph {
-  font-size: 26px;
+  /* Sized off the tile so a glyph icon grows with the artwork ones. */
+  font-size: calc(var(--icon-art) * 0.5);
   color: #fff;
 }
 
 .icon-label {
-  font-size: 12px;
+  font-size: var(--icon-label);
   line-height: 1.25;
   padding: 1px 3px;
   text-shadow: 1px 1px 1px rgb(0 0 0 / 0.6);
@@ -154,11 +166,15 @@ body {
   overflow: hidden;
 }
 
-/* The bin and icon-shaped artwork sit on the desktop itself, not in a coloured tile. */
+/* The bin and icon-shaped artwork sit on the desktop itself, not in a coloured tile.
+   The padding stands in for the border they drop, so the artwork gets the same 48px
+   square a picture does, and the shadow has room to fall rather than being clipped. */
 .icon.is-bin .icon-art,
 .icon.is-bare .icon-art {
   background: none;
   border: none;
+  padding: 2px;
+  overflow: visible;
 }
 
 /* Show the whole icon rather than cropping it to fill the slot. */
@@ -172,7 +188,7 @@ body {
 }
 
 .icon.is-bin .icon-glyph {
-  font-size: 40px;
+  font-size: calc(var(--icon-art) * 0.77);
   line-height: 1;
   filter: drop-shadow(1px 1px 1px rgb(0 0 0 / 0.5));
 }
@@ -415,6 +431,15 @@ body {
   font-size: 20px;
 }
 
+/* Icon-shaped artwork sits inside the slot untouched, as it does on the desktop. */
+.bin-row-art.is-bare,
+.start-item-art.is-bare,
+.task-art.is-bare {
+  object-fit: contain;
+  border: none;
+  background: none;
+}
+
 /* Context menu ------------------------------------------------------------- */
 
 .context-menu {
@@ -529,6 +554,36 @@ body {
 .field-row code {
   font-size: 12px;
   text-transform: uppercase;
+}
+
+.chrome-select {
+  flex: 1;
+  min-width: 0;
+  appearance: none;
+  font: inherit;
+  font-size: 12px;
+  color: inherit;
+  height: 26px;
+  padding: 0 6px;
+  /* A combo box's face-coloured button and its arrow, without a wrapper element to
+     hang a pseudo-element off: two gradient half-triangles meeting over a block. */
+  padding-right: 24px;
+  background-color: #fff;
+  background-image: linear-gradient(to bottom left, currentColor 50%, transparent 50%),
+    linear-gradient(to bottom right, currentColor 50%, transparent 50%),
+    linear-gradient(var(--face), var(--face));
+  background-position: right 11px center, right 7px center, right 0 top 0;
+  background-size: 4px 4px, 4px 4px, 18px 100%;
+  background-repeat: no-repeat;
+  border: 2px solid;
+  border-color: var(--face-dark) var(--face-light) var(--face-light) var(--face-dark);
+  cursor: pointer;
+}
+
+.field-hint {
+  margin: -6px 0 0;
+  font-size: 11px;
+  color: var(--face-darker);
 }
 
 .pane-actions {
@@ -864,6 +919,54 @@ body {
   }
   .task-art {
     margin-right: 0;
+  }
+}
+
+/* Screensaver -------------------------------------------------------------- */
+
+.screensaver {
+  position: fixed;
+  inset: 0;
+  z-index: 19000;
+  background: #000;
+  cursor: none;
+}
+
+/* Savers draw small and get blown back up, so the pixels stay square and crunchy. */
+.screensaver-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+}
+
+/* Interlocking tiles of guys, each fading on its own clock. */
+.guy-mosaic {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: #000;
+}
+
+.guy-tile {
+  position: absolute;
+  /* The tile decides the shape; the face gets cropped to fit it. */
+  object-fit: cover;
+  opacity: 0;
+  animation: guy-breathe ease-in-out infinite;
+}
+
+/* Mostly lit, so the mosaic reads as a wall of guys rather than a few stragglers. */
+@keyframes guy-breathe {
+  0% {
+    opacity: 0;
+  }
+  16%,
+  76% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
   }
 }
 

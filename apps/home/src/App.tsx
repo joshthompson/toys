@@ -1,4 +1,4 @@
-import { createEffect, createSignal, For, Show } from 'solid-js';
+import { createEffect, createSignal, For, onCleanup, Show } from 'solid-js';
 import { createStore } from 'solid-js/store';
 import { toys, resolve, isExternal, artwork, type Toy } from './toys';
 import { DesktopIcon } from './DesktopIcon';
@@ -6,14 +6,20 @@ import { ToyWindow } from './ToyWindow';
 import { Taskbar } from './Taskbar';
 import { PowerScreen } from './PowerScreen';
 import { ContextMenu, type MenuEntry } from './ContextMenu';
+import { Screensaver } from './Screensaver';
+import { findScreensaver, NO_SCREENSAVER } from './screensavers';
 import { clear as clearSaved, load, save } from './storage';
 import {
   BIN_GLYPH,
   BIN_KEY,
   DEFAULT_DESKTOP,
+  DEFAULT_ICON_SIZE,
+  ICON_METRICS,
   TASKBAR_HEIGHT,
   binName,
+  isIconSize,
   type BinLevel,
+  type IconSize,
   type Panes,
   type Point,
   type Power,
@@ -23,43 +29,49 @@ import {
 
 /** Left edge of the first window — clear of the desktop icon column. */
 const CASCADE_ORIGIN = 130;
-/** One icon slot. Icons drag freely, but start life on this grid. */
-const ICON_W = 88;
-const ICON_H = 96;
+/** Quiet time before the screensaver takes the screen. */
+const IDLE_MS = 60_000;
+/** What counts as someone still being there. */
+const IDLE_EVENTS = ['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchstart'];
 
 type Box = { x: number; y: number; w: number; h: number };
+/** One icon slot, which changes with the icon size setting. Icons start life on this grid. */
+type Slot = { w: number; h: number };
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi);
 
 /**
- * Does the marquee touch this icon? Icon boxes are ICON_W × ICON_H from their
- * top-left position, and the desktop fills the viewport, so positions are already
- * in the same coordinate space as the pointer.
+ * Does the marquee touch this icon? Icon boxes are one slot from their top-left
+ * position, and the desktop fills the viewport, so positions are already in the
+ * same coordinate space as the pointer.
  */
-const overlaps = (box: Box, p: Point | undefined) =>
-  !!p && box.x < p.x + ICON_W && box.x + box.w > p.x && box.y < p.y + ICON_H && box.y + box.h > p.y;
+const overlaps = (box: Box, p: Point | undefined, slot: Slot) =>
+  !!p && box.x < p.x + slot.w && box.x + box.w > p.x && box.y < p.y + slot.h && box.y + box.h > p.y;
 
 /** Names of toys that no longer exist are dropped on the way out of storage. */
 const known = (names: string[] | undefined) =>
   (names ?? []).filter((n) => toys.some((t) => t.name === n));
 
-/** A position saved on a bigger screen mustn't strand an icon off the edge of this one. */
-const onScreen = (p: Point): Point => ({
-  x: clamp(p.x, 0, window.innerWidth - ICON_W),
-  y: clamp(p.y, 0, window.innerHeight - TASKBAR_HEIGHT - ICON_H),
+/**
+ * A position saved on a bigger screen — or from back when the icons were smaller —
+ * mustn't strand an icon off the edge.
+ */
+const onScreen = (p: Point, slot: Slot): Point => ({
+  x: clamp(p.x, 0, window.innerWidth - slot.w),
+  y: clamp(p.y, 0, window.innerHeight - TASKBAR_HEIGHT - slot.h),
 });
 
 /** Toys down the left in columns, bin in the bottom-left corner. */
-const layout = (visible: Toy[]): Record<string, Point> => {
+const layout = (visible: Toy[], slot: Slot): Record<string, Point> => {
   const positions: Record<string, Point> = {};
-  const binY = Math.max(8, window.innerHeight - TASKBAR_HEIGHT - 8 - ICON_H);
+  const binY = Math.max(8, window.innerHeight - TASKBAR_HEIGHT - 8 - slot.h);
   // Leave the bottom slot of the first column free so the bin doesn't land on a toy.
-  const perColumn = Math.max(1, Math.floor((binY - 8) / ICON_H));
+  const perColumn = Math.max(1, Math.floor((binY - 8) / slot.h));
 
   visible.forEach((toy, i) => {
     positions[toy.name] = {
-      x: 8 + Math.floor(i / perColumn) * ICON_W,
-      y: 8 + (i % perColumn) * ICON_H,
+      x: 8 + Math.floor(i / perColumn) * slot.w,
+      y: 8 + (i % perColumn) * slot.h,
     };
   });
   positions[BIN_KEY] = { x: 8, y: binY };
@@ -68,6 +80,12 @@ const layout = (visible: Toy[]): Record<string, Point> => {
 
 export function App() {
   const saved = load();
+  const [iconSize, setIconSize] = createSignal<IconSize>(
+    isIconSize(saved.iconSize) ? saved.iconSize : DEFAULT_ICON_SIZE,
+  );
+  /** Geometry for the current icon size — the slot is what every layout sum works in. */
+  const metrics = () => ICON_METRICS[iconSize()];
+  const slot = () => metrics().slot;
 
   // A store, not a signal: <For> keys by object reference, so replacing a window
   // object on every drag frame would tear down and rebuild its iframe. Fine-grained
@@ -76,8 +94,10 @@ export function App() {
   // Saved positions layer over a fresh layout, so toys added since the last visit
   // still get a slot instead of stacking up at the origin.
   const [positions, setPositions] = createStore<Record<string, Point>>({
-    ...layout(toys),
-    ...Object.fromEntries(Object.entries(saved.positions ?? {}).map(([k, p]) => [k, onScreen(p)])),
+    ...layout(toys, slot()),
+    ...Object.fromEntries(
+      Object.entries(saved.positions ?? {}).map(([k, p]) => [k, onScreen(p, slot())]),
+    ),
   });
   const [bins, setBins] = createStore<{ toys: string[] }[]>(
     // There is always at least one bin — the rest of the app indexes into it.
@@ -93,6 +113,12 @@ export function App() {
   /** Emptied out of a bin: gone for good, short of a factory reset. */
   const [purged, setPurged] = createSignal<string[]>(known(saved.purged));
   const [power, setPower] = createSignal<Power>('on');
+  /** A saver that has since been removed from the registry reads as no saver at all. */
+  const [screensaver, setScreensaver] = createSignal(
+    saved.screensaver && findScreensaver(saved.screensaver) ? saved.screensaver : NO_SCREENSAVER,
+  );
+  /** True while the screensaver holds the screen, whether it idled in or was previewed. */
+  const [saving, setSaving] = createSignal(false);
 
   let nextId = 1;
   let nextZ = 1;
@@ -132,6 +158,43 @@ export function App() {
       bins: JSON.parse(JSON.stringify(bins)),
       purged: purged(),
       colour: colour(),
+      iconSize: iconSize(),
+      screensaver: screensaver(),
+    });
+  });
+
+  // The grid is measured in slots, so a new icon size is a new grid and the icons
+  // re-flow onto it — as they did when you changed icon size in the era this apes.
+  // Keeping the old spots instead would overlap the bigger icons and strand the
+  // smaller ones. Each size has one metrics object, so identity is change enough.
+  let sized = slot();
+  createEffect(() => {
+    const current = slot();
+    if (current === sized) return;
+    sized = current;
+    setPositions(layout(liveToys(), current));
+  });
+
+  // The screensaver waits for the desktop to go quiet; any input at all takes it back.
+  createEffect(() => {
+    if (screensaver() === NO_SCREENSAVER || power() !== 'on') return;
+
+    let timer: ReturnType<typeof setTimeout>;
+    const arm = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        // Input inside a toy's iframe never reaches us. Someone playing one looks
+        // idle from out here, so wait for them to click back out first.
+        if (document.activeElement?.tagName === 'IFRAME') arm();
+        else setSaving(true);
+      }, IDLE_MS);
+    };
+
+    IDLE_EVENTS.forEach((e) => window.addEventListener(e, arm, { passive: true }));
+    arm();
+    onCleanup(() => {
+      clearTimeout(timer);
+      IDLE_EVENTS.forEach((e) => window.removeEventListener(e, arm));
     });
   });
 
@@ -240,8 +303,8 @@ export function App() {
    */
   const moveIcons = (key: string, x: number, y: number) => {
     const keys = group(key).filter((k) => positions[k]);
-    const maxX = window.innerWidth - ICON_W;
-    const maxY = window.innerHeight - TASKBAR_HEIGHT - ICON_H;
+    const maxX = window.innerWidth - slot().w;
+    const maxY = window.innerHeight - TASKBAR_HEIGHT - slot().h;
 
     let dx = x - positions[key].x;
     let dy = y - positions[key].y;
@@ -252,7 +315,7 @@ export function App() {
     for (const k of keys) setPositions(k, { x: positions[k].x + dx, y: positions[k].y + dy });
   };
 
-  const arrangeIcons = () => setPositions(layout(liveToys()));
+  const arrangeIcons = () => setPositions(layout(liveToys(), slot()));
 
   /** Rubber-band selection: press empty desktop, drag a rectangle over the icons. */
   const startMarquee = (e: PointerEvent & { currentTarget: HTMLElement }) => {
@@ -272,7 +335,7 @@ export function App() {
       h: Math.abs(e.clientY - marqueeOrigin.y),
     };
     setMarquee(box);
-    setSelected(iconKeys().filter((k) => overlaps(box, positions[k])));
+    setSelected(iconKeys().filter((k) => overlaps(box, positions[k], slot())));
   };
 
   const endMarquee = () => {
@@ -317,7 +380,7 @@ export function App() {
   const desktopMenu = (): MenuEntry[] => [
     { label: 'Arrange Icons', onSelect: arrangeIcons },
     { separator: true },
-    { label: 'Desktop Settings', onSelect: () => spawn('Desktop Settings', { type: 'settings' }, 400, 320) },
+    { label: 'Desktop Settings', onSelect: () => spawn('Desktop Settings', { type: 'settings' }, 400, 430) },
     { label: 'About Josh OS', onSelect: () => spawn('About Josh OS', { type: 'about' }, 380, 300) },
   ];
 
@@ -328,13 +391,24 @@ export function App() {
     emptyLevel,
     colour,
     setColour,
+    iconSize,
+    setIconSize,
+    screensaver,
+    setScreensaver,
+    previewScreensaver: () => setSaving(true),
     toyCount: () => liveToys().length,
   };
 
   return (
     <main
       class="desktop"
-      style={{ background: colour() }}
+      style={{
+        background: colour(),
+        '--icon-slot-w': `${slot().w}px`,
+        '--icon-slot-h': `${slot().h}px`,
+        '--icon-art': `${metrics().art}px`,
+        '--icon-label': `${metrics().label}px`,
+      }}
       onPointerDown={startMarquee}
       onPointerMove={dragMarquee}
       onPointerUp={endMarquee}
@@ -440,6 +514,11 @@ export function App() {
         onFactoryReset={factoryReset}
         taskbarHeight={TASKBAR_HEIGHT}
       />
+
+      {/* Above the taskbar but below the power screen — a restart wins over a saver. */}
+      <Show when={saving()}>
+        <Screensaver id={screensaver()} onDismiss={() => setSaving(false)} />
+      </Show>
 
       <Show when={power() !== 'on'}>
         {/* Covers the lot, taskbar included — the desktop is gone until the reload. */}
