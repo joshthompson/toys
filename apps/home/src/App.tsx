@@ -1,11 +1,25 @@
-import { createEffect, createSignal, For, onCleanup, Show } from 'solid-js';
+import { createEffect, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import { createStore } from 'solid-js/store';
 import { toys, resolve, isExternal, artwork, type Toy } from './toys';
+import {
+  MAX_FILE_BYTES,
+  clearFiles,
+  formatBytes,
+  hydrate,
+  isFileId,
+  kindOf,
+  newFileId,
+  readFiles,
+  removeFile,
+  writeFile,
+  type DesktopFile,
+} from './files';
 import { DesktopIcon } from './DesktopIcon';
 import { ToyWindow } from './ToyWindow';
 import { Taskbar } from './Taskbar';
 import { PowerScreen } from './PowerScreen';
 import { ContextMenu, type MenuEntry } from './ContextMenu';
+import { longPress } from './longPress';
 import { Screensaver } from './Screensaver';
 import { findScreensaver, NO_SCREENSAVER } from './screensavers';
 import { clear as clearSaved, load, save } from './storage';
@@ -13,10 +27,15 @@ import {
   BIN_GLYPH,
   BIN_KEY,
   DEFAULT_DESKTOP,
+  AUDIO_APP,
   DEFAULT_ICON_SIZE,
   ICON_METRICS,
+  IMAGE_APP,
   TASKBAR_HEIGHT,
+  VIDEO_APP,
+  WRITING_APP,
   binName,
+  glyphFor,
   isIconSize,
   type BinLevel,
   type IconSize,
@@ -61,21 +80,45 @@ const onScreen = (p: Point, slot: Slot): Point => ({
   y: clamp(p.y, 0, window.innerHeight - TASKBAR_HEIGHT - slot.h),
 });
 
-/** Toys down the left in columns, bin in the bottom-left corner. */
-const layout = (visible: Toy[], slot: Slot): Record<string, Point> => {
-  const positions: Record<string, Point> = {};
-  const binY = Math.max(8, window.innerHeight - TASKBAR_HEIGHT - 8 - slot.h);
-  // Leave the bottom slot of the first column free so the bin doesn't land on a toy.
-  const perColumn = Math.max(1, Math.floor((binY - 8) / slot.h));
+/** How many icons fit in a column, above the bin's corner. */
+const perColumn = (slot: Slot) =>
+  Math.max(1, Math.floor((Math.max(8, window.innerHeight - TASKBAR_HEIGHT - 8 - slot.h) - 8) / slot.h));
 
-  visible.forEach((toy, i) => {
-    positions[toy.name] = {
-      x: 8 + Math.floor(i / perColumn) * slot.w,
-      y: 8 + (i % perColumn) * slot.h,
+/** Icons down the left in columns, bin in the bottom-left corner. */
+const layout = (keys: string[], slot: Slot): Record<string, Point> => {
+  const positions: Record<string, Point> = {};
+  // Leave the bottom slot of the first column free so the bin doesn't land on an icon.
+  const column = perColumn(slot);
+
+  keys.forEach((key, i) => {
+    positions[key] = {
+      x: 8 + Math.floor(i / column) * slot.w,
+      y: 8 + (i % column) * slot.h,
     };
   });
-  positions[BIN_KEY] = { x: 8, y: binY };
+  positions[BIN_KEY] = { x: 8, y: Math.max(8, window.innerHeight - TASKBAR_HEIGHT - 8 - slot.h) };
   return positions;
+};
+
+/**
+ * The first slot on the grid nothing is sitting in — where a file goes when it turns
+ * up without a position of its own, which is every file on the reload after its drop.
+ * Icons can be dragged anywhere, so "sitting in" means within half a slot of it.
+ */
+const freeSlot = (taken: Point[], slot: Slot): Point => {
+  const column = perColumn(slot);
+  for (let i = 0; i < column * 40; i++) {
+    const spot = {
+      x: 8 + Math.floor(i / column) * slot.w,
+      y: 8 + (i % column) * slot.h,
+    };
+    const clash = taken.some(
+      (p) => Math.abs(p.x - spot.x) < slot.w / 2 && Math.abs(p.y - spot.y) < slot.h / 2,
+    );
+    if (!clash) return spot;
+  }
+  // A desktop that full has bigger problems; drop it on the pile.
+  return { x: 8, y: 8 };
 };
 
 export function App() {
@@ -94,15 +137,27 @@ export function App() {
   // Saved positions layer over a fresh layout, so toys added since the last visit
   // still get a slot instead of stacking up at the origin.
   const [positions, setPositions] = createStore<Record<string, Point>>({
-    ...layout(toys, slot()),
+    ...layout(toys.map((t) => t.name), slot()),
     ...Object.fromEntries(
       Object.entries(saved.positions ?? {}).map(([k, p]) => [k, onScreen(p, slot())]),
     ),
   });
-  const [bins, setBins] = createStore<{ toys: string[] }[]>(
+  const [bins, setBins] = createStore<{ toys: string[]; files: string[] }[]>(
     // There is always at least one bin — the rest of the app indexes into it.
-    saved.bins?.length ? saved.bins.map((b) => ({ toys: known(b.toys) })) : [{ toys: [] }],
+    saved.bins?.length
+      ? saved.bins.map((b) => ({ toys: known(b.toys), files: b.files ?? [] }))
+      : [{ toys: [], files: [] }],
   );
+  /**
+   * Files dropped on the desktop, in the order they landed. They arrive a beat after
+   * boot — their contents come from IndexedDB, which is async — so the desktop starts
+   * without them and they appear into their saved positions.
+   */
+  const [files, setFiles] = createStore<DesktopFile[]>([]);
+  /** True while a file is being dragged in from outside, so the desktop can say so. */
+  const [dropping, setDropping] = createSignal(false);
+  /** The id of the file whose name is currently being typed over, if any. */
+  const [renaming, setRenaming] = createSignal<string | null>(null);
   /** Icon keys — toy names, plus BIN_KEY — currently selected. */
   const [selected, setSelected] = createSignal<string[]>([]);
   /** The rubber-band rectangle being dragged across the desktop, if any. */
@@ -110,6 +165,11 @@ export function App() {
   const [binHover, setBinHover] = createSignal(false);
   const [menu, setMenu] = createSignal<{ x: number; y: number; entries: MenuEntry[] } | null>(null);
   const [colour, setColour] = createSignal(saved.colour ?? DEFAULT_DESKTOP);
+  /**
+   * The id of the picture tiled across the desktop. Held as an id rather than the file
+   * itself so it survives a reload, where the files themselves arrive later.
+   */
+  const [wallpaper, setWallpaper] = createSignal(saved.wallpaper ?? null);
   /** Emptied out of a bin: gone for good, short of a factory reset. */
   const [purged, setPurged] = createSignal<string[]>(known(saved.purged));
   const [power, setPower] = createSignal<Power>('on');
@@ -129,14 +189,40 @@ export function App() {
   /** The bin currently sitting on the desktop — always the outermost one. */
   const topDepth = () => bins.length - 1;
   const inBins = () => bins.flatMap((b) => b.toys);
+  const filesInBins = () => bins.flatMap((b) => b.files);
   const byName = (name: string) => toys.find((t) => t.name === name);
+  const byId = (id: string) => files.find((f) => f.id === id);
   const liveToys = () => toys.filter((t) => !inBins().includes(t.name) && !purged().includes(t.name));
+  /** Files still out on the desktop. A purged one is gone from `files` altogether. */
+  const liveFiles = () => files.filter((f) => !filesInBins().includes(f.id));
   const binLevels = (): BinLevel[] =>
-    bins.map((level) => ({ toys: level.toys.map(byName).filter((t): t is Toy => !!t) }));
+    bins.map((level) => ({
+      toys: level.toys.map(byName).filter((t): t is Toy => !!t),
+      files: level.files.map(byId).filter((f): f is DesktopFile => !!f),
+    }));
+
+  /** Every icon on the desktop bar the bin, in the order the grid lays them out. */
+  const iconOrder = () => [...liveToys().map((t) => t.name), ...liveFiles().map((f) => f.id)];
+
+  /**
+   * The spots the visible icons hold. Positions linger for binned toys, so this reads
+   * the live icons rather than the whole store — otherwise a file arriving would step
+   * around gaps that only look occupied.
+   */
+  const occupied = () => iconKeys().map((k) => positions[k]).filter((p): p is Point => !!p);
+
+  /**
+   * The background picture, which has to still be on the desktop to count — bin it and
+   * the desktop goes back to its colour until you put it back.
+   */
+  const wallpaperFile = () => {
+    const id = wallpaper();
+    return id ? liveFiles().find((f) => f.id === id) : undefined;
+  };
 
   const isSelected = (key: string) => selected().includes(key);
-  /** Everything a marquee can catch: the live toys, plus the bin. */
-  const iconKeys = () => [...liveToys().map((t) => t.name), BIN_KEY];
+  /** Everything a marquee can catch: the live toys and files, plus the bin. */
+  const iconKeys = () => [...iconOrder(), BIN_KEY];
   /** The selected toys, in desktop order. The bin isn't a toy, so it drops out here. */
   const selectedToys = () => liveToys().filter((t) => isSelected(t.name));
 
@@ -158,9 +244,31 @@ export function App() {
       bins: JSON.parse(JSON.stringify(bins)),
       purged: purged(),
       colour: colour(),
+      wallpaper: wallpaper(),
       iconSize: iconSize(),
       screensaver: screensaver(),
     });
+  });
+
+  // Closing the tab on a running machine is pulling its plug, so the browser is asked
+  // to check first. Only the browser's own wording appears — a page isn't allowed to
+  // write this dialog — and browsers skip it entirely until someone has clicked on the
+  // page at least once, which is their rule and not ours.
+  //
+  // Shutting down or restarting from the Start menu isn't a close worth stopping: the
+  // machine is already off by the time the tab goes. The power is read inside the
+  // handler rather than gating an effect, because shutting down closes the tab in the
+  // same tick and an effect's cleanup would not have run by then.
+  onMount(() => {
+    const warn = (e: BeforeUnloadEvent) => {
+      if (power() !== 'on') return;
+      e.preventDefault();
+      // Browsers that predate preventDefault meaning anything here want the property.
+      e.returnValue = true;
+    };
+
+    window.addEventListener('beforeunload', warn);
+    onCleanup(() => window.removeEventListener('beforeunload', warn));
   });
 
   // The grid is measured in slots, so a new icon size is a new grid and the icons
@@ -172,7 +280,7 @@ export function App() {
     const current = slot();
     if (current === sized) return;
     sized = current;
-    setPositions(layout(liveToys(), current));
+    setPositions(layout(iconOrder(), current));
   });
 
   // The screensaver waits for the desktop to go quiet; any input at all takes it back.
@@ -198,6 +306,113 @@ export function App() {
     });
   });
 
+  // Files come back from IndexedDB just after boot. Anything without a saved position —
+  // a first sighting, or a file whose spot was lost with a factory reset — is parked on
+  // the first free slot rather than stacked at the origin.
+  onMount(async () => {
+    const stored = await readFiles();
+    if (!stored.length) return;
+    const arrived = stored.map(hydrate);
+    // Positions first: an icon reads its own position as it renders, so a file added
+    // to the store before it has one would have nothing to render at.
+    const taken = occupied();
+    for (const file of arrived) {
+      if (positions[file.id]) continue;
+      const spot = freeSlot(taken, slot());
+      taken.push(spot);
+      setPositions(file.id, spot);
+    }
+    setFiles(arrived);
+  });
+
+  const notice = (title: string, body: string) => spawn(title, { type: 'notice', body }, 400, 210);
+
+  /**
+   * Take files onto the desktop, whether they were dragged in or pasted.
+   *
+   * A drop knows where it happened, so the icons land under the pointer and cascade
+   * off it; a paste doesn't, so they line up on the first free slots instead.
+   *
+   * Anything over the size limit is named and refused; everything else is on the
+   * desktop the moment it lands, and written to IndexedDB behind it.
+   */
+  const acceptFiles = (dropped: File[], at?: Point) => {
+    const tooBig = dropped.filter((f) => f.size > MAX_FILE_BYTES);
+    const taking = dropped.filter((f) => f.size <= MAX_FILE_BYTES);
+    const taken = occupied();
+
+    let i = 0;
+    for (const file of taking) {
+      const record = {
+        id: newFileId(),
+        // A file off the clipboard can arrive nameless; it still needs a label.
+        name: file.name || 'Pasted file',
+        type: file.type,
+        size: file.size,
+        added: Date.now() + i,
+        blob: file,
+      };
+      // The icon doesn't wait on storage: a slow or missing IndexedDB costs the file
+      // its place after the next reload, not its place on the desktop now.
+      void writeFile(record);
+      // This has to be set before the file joins the store, since the icon that
+      // appears the moment it does reads its position as it renders.
+      const spot = at
+        ? onScreen({ x: at.x - slot().w / 2 + i * 24, y: at.y - slot().h / 2 + i * 24 }, slot())
+        : freeSlot(taken, slot());
+      taken.push(spot);
+      setPositions(record.id, spot);
+      setFiles(files.length, hydrate(record));
+      i++;
+    }
+
+    if (tooBig.length) {
+      const named = tooBig.map((f) => `${f.name} (${formatBytes(f.size)})`).join(', ');
+      notice(
+        'File too large',
+        `${named} won't fit on the desktop. The limit is ${formatBytes(MAX_FILE_BYTES)} per file.`,
+      );
+    }
+  };
+
+  /**
+   * Ctrl/Cmd+V puts files on the desktop too, for anyone who copied one rather than
+   * dragging it. A paste into a field belongs to that field, and a paste with no files
+   * on the clipboard isn't ours at all.
+   */
+  onMount(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      const focused = document.activeElement as HTMLElement | null;
+      if (focused?.matches('input, textarea, [contenteditable]')) return;
+      const pasted = Array.from(e.clipboardData?.files ?? []);
+      if (!pasted.length) return;
+      e.preventDefault();
+      acceptFiles(pasted);
+    };
+
+    window.addEventListener('paste', onPaste);
+    onCleanup(() => window.removeEventListener('paste', onPaste));
+  });
+
+  /** Drops land on the desktop itself; one aimed into an open window is that window's. */
+  const isDesktopDrop = (e: DragEvent) => !(e.target as HTMLElement)?.closest?.('.window');
+
+  const onDragOver = (e: DragEvent) => {
+    if (!isDesktopDrop(e) || !e.dataTransfer?.types.includes('Files')) return;
+    // Without this the browser navigates to the file instead of handing it over.
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    setDropping(true);
+  };
+
+  const onDrop = (e: DragEvent) => {
+    if (!isDesktopDrop(e)) return;
+    e.preventDefault();
+    setDropping(false);
+    const dropped = Array.from(e.dataTransfer?.files ?? []);
+    if (dropped.length) acceptFiles(dropped, { x: e.clientX, y: e.clientY });
+  };
+
   const shutDown = () => {
     // Only a script-opened window may close itself, so black out first and let
     // close() take the tab away if the browser allows it.
@@ -211,6 +426,8 @@ export function App() {
     // Power down before wiping, so the persistence effect is already parked.
     setPower('restarting');
     clearSaved();
+    // Dropped files live in their own store, so they need wiping in their own right.
+    void clearFiles();
   };
 
   const patch = (id: number, changes: Partial<WindowState>) => {
@@ -264,6 +481,101 @@ export function App() {
   };
 
   const openBin = (depth: number) => spawn(binName(depth), { type: 'bin', depth }, 460, 340);
+
+  /** Whichever app takes this kind of file, or a notice that nothing here does. */
+  const openFile = (file: DesktopFile) => {
+    if (filesInBins().includes(file.id)) return;
+    const open = (app: string, content: WindowContent, w: number, h: number) =>
+      spawn(`${file.name} — ${app}`, content, w, h);
+
+    if (file.kind === 'image') open(IMAGE_APP, { type: 'picture', fileId: file.id }, 720, 560);
+    else if (file.kind === 'audio') open(AUDIO_APP, { type: 'audio', fileId: file.id }, 620, 480);
+    else if (file.kind === 'video') open(VIDEO_APP, { type: 'video', fileId: file.id }, 760, 580);
+    else if (file.kind === 'text') open(WRITING_APP, { type: 'writing', fileId: file.id }, 560, 460);
+    else
+      notice(
+        `Can't open ${file.name}`,
+        `There's no app on Josh's Computer that opens ${file.type || 'this kind of file'}. It can sit on the desktop, though.`,
+      );
+  };
+
+  /** Close every window looking at a file — it's not on the desktop to look at any more. */
+  const FILE_WINDOWS = ['picture', 'writing', 'audio', 'video'];
+
+  const closeFileWindows = (id: string) =>
+    setWindows((ws) =>
+      ws.filter((w) => !('fileId' in w.content && w.content.fileId === id && FILE_WINDOWS.includes(w.content.type))),
+    );
+
+  /** Binned, not destroyed: the file stays in IndexedDB until the bin is emptied. */
+  const deleteFile = (id: string) => {
+    setBins(topDepth(), 'files', (f) => [...f, id]);
+    closeFileWindows(id);
+    setSelected((s) => s.filter((k) => k !== id));
+  };
+
+  const restoreFile = (id: string) => {
+    const level = bins.findIndex((b) => b.files.includes(id));
+    if (level >= 0) setBins(level, 'files', (f) => f.filter((k) => k !== id));
+  };
+
+  /** Deleting anything on the desktop, whichever kind of thing it is. */
+  const binIcon = (key: string) => (isFileId(key) ? deleteFile(key) : deleteToy(key));
+
+  /**
+   * Give a file a new name. The kind is worked out afresh from it, so naming something
+   * `.txt` really does hand it to the writing app — though a file the browser already
+   * told us was an image stays an image whatever it's called.
+   */
+  const renameFile = (id: string, name: string) => {
+    const i = files.findIndex((f) => f.id === id);
+    const clean = name.trim();
+    if (i < 0 || !clean || clean === files[i].name) return;
+
+    setFiles(i, { name: clean, kind: kindOf(clean, files[i].type) });
+    void writeFile({
+      id,
+      name: clean,
+      type: files[i].type,
+      size: files[i].size,
+      added: files[i].added,
+      blob: files[i].blob,
+    });
+
+    // A writing window is named after its file, and `spawn` finds an open window by
+    // title — leave a stale one and re-opening the file would open a second window on it.
+    windows.forEach((win, at) => {
+      if (win.content.type === 'writing' && win.content.fileId === id)
+        setWindows(at, 'title', `${clean} — ${WRITING_APP}`);
+    });
+  };
+
+  /** Renaming finished, whether it was typed out, clicked away from, or abandoned. */
+  const endRename = (id: string, name: string | null) => {
+    // The input can lose focus on the way out, after the edit is already over.
+    if (renaming() !== id) return;
+    setRenaming(null);
+    if (name !== null) renameFile(id, name);
+  };
+
+  /** Writing the file back after an edit: same file, new contents, new size. */
+  const saveText = (id: string, text: string) => {
+    const i = files.findIndex((f) => f.id === id);
+    if (i < 0) return;
+    const blob = new Blob([text], { type: files[i].type || 'text/plain' });
+    const record = { ...files[i], blob, size: blob.size };
+    void writeFile({
+      id: record.id,
+      name: record.name,
+      type: record.type,
+      size: record.size,
+      added: record.added,
+      blob,
+    });
+    // The old blob: URL pointed at the text before this edit, so it's no use now.
+    URL.revokeObjectURL(files[i].url);
+    setFiles(i, { blob, size: blob.size, url: URL.createObjectURL(blob) });
+  };
   const openExternally = (toy: Toy) =>
     toy.href && window.open(resolve(toy.href), '_blank', 'noopener');
 
@@ -281,19 +593,34 @@ export function App() {
   const deleteGroup = (name: string) =>
     group(name)
       .filter((k) => k !== BIN_KEY)
-      .forEach(deleteToy);
+      .forEach(binIcon);
 
   /** Deleting the bin doesn't destroy it — it nests it inside a brand new, bigger bin. */
-  const deleteBin = () => setBins(bins.length, { toys: [] });
+  const deleteBin = () => setBins(bins.length, { toys: [], files: [] });
 
   const restore = (name: string) => {
     const level = bins.findIndex((b) => b.toys.includes(name));
     if (level >= 0) setBins(level, 'toys', (t) => t.filter((n) => n !== name));
   };
 
+  /**
+   * Empty a bin. Binned toys are only ever hidden — the app owns them — but a file has
+   * nowhere else to exist, so emptying really does destroy it: out of IndexedDB, out of
+   * the store, and its blob: URL let go.
+   */
   const emptyLevel = (depth: number) => {
+    const doomed = bins[depth].files;
     setPurged((p) => [...p, ...bins[depth].toys]);
     setBins(depth, 'toys', []);
+    setBins(depth, 'files', []);
+    for (const id of doomed) {
+      const file = byId(id);
+      if (file) URL.revokeObjectURL(file.url);
+      // The background is held by id, so a destroyed one would leave a dangling setting.
+      if (wallpaper() === id) setWallpaper(null);
+      void removeFile(id);
+    }
+    setFiles((f) => f.filter((file) => !doomed.includes(file.id)));
   };
 
   /**
@@ -315,7 +642,7 @@ export function App() {
     for (const k of keys) setPositions(k, { x: positions[k].x + dx, y: positions[k].y + dy });
   };
 
-  const arrangeIcons = () => setPositions(layout(liveToys(), slot()));
+  const arrangeIcons = () => setPositions(layout(iconOrder(), slot()));
 
   /** Rubber-band selection: press empty desktop, drag a rectangle over the icons. */
   const startMarquee = (e: PointerEvent & { currentTarget: HTMLElement }) => {
@@ -325,6 +652,22 @@ export function App() {
     setSelected([]);
     e.currentTarget.setPointerCapture(e.pointerId);
   };
+
+  /**
+   * The desktop hears about presses on the windows sitting on it too, since they bubble.
+   * Only the desktop itself, and the layer the icons are positioned in, are the desktop.
+   */
+  const onDesktopItself = (target: EventTarget | null) =>
+    target instanceof HTMLElement &&
+    (target.classList.contains('desktop') || target.classList.contains('desktop-icons'));
+
+  // Holding the desktop opens its menu, since a finger has no right button. The marquee
+  // this press started is dropped: a hold that stayed put has drawn nothing anyway.
+  const deskPress = longPress((x, y) => {
+    endMarquee();
+    setSelected([]);
+    openMenu(x, y, desktopMenu());
+  });
 
   const dragMarquee = (e: PointerEvent) => {
     if (!marqueeOrigin) return;
@@ -370,6 +713,42 @@ export function App() {
     ];
   };
 
+  const fileMenu = (file: DesktopFile): MenuEntry[] => {
+    // Right-clicking one of several selected icons acts on all of them, toys included.
+    const chosen = group(file.id).filter((k) => k !== BIN_KEY);
+    if (chosen.length > 1) {
+      const open = (key: string) => {
+        const picked = isFileId(key) ? byId(key) : undefined;
+        if (picked) openFile(picked);
+        else {
+          const toy = byName(key);
+          if (toy) openToy(toy);
+        }
+      };
+      return [
+        { label: 'Open All', onSelect: () => chosen.forEach(open) },
+        { separator: true },
+        { label: 'Delete All', onSelect: () => chosen.forEach(binIcon) },
+      ];
+    }
+
+    return [
+      { label: 'Open', onSelect: () => openFile(file) },
+      { label: 'Rename', onSelect: () => setRenaming(file.id) },
+      ...(file.kind === 'image'
+        ? [
+            {
+              label: 'Make Desktop Background',
+              disabled: wallpaper() === file.id,
+              onSelect: () => setWallpaper(file.id),
+            },
+          ]
+        : []),
+      { separator: true },
+      { label: 'Delete', onSelect: () => deleteFile(file.id) },
+    ];
+  };
+
   const binMenu = (): MenuEntry[] => [
     { label: 'Open', onSelect: () => openBin(topDepth()) },
     { label: 'Open Externally', disabled: true, onSelect: () => {} },
@@ -379,6 +758,10 @@ export function App() {
 
   const desktopMenu = (): MenuEntry[] => [
     { label: 'Arrange Icons', onSelect: arrangeIcons },
+    // Only worth offering once there's a background to take away.
+    ...(wallpaperFile()
+      ? [{ label: 'Remove Desktop Background', onSelect: () => setWallpaper(null) }]
+      : []),
     { separator: true },
     { label: 'Desktop Settings', onSelect: () => spawn('Desktop Settings', { type: 'settings' }, 400, 430) },
     { label: 'About Josh OS', onSelect: () => spawn('About Josh OS', { type: 'about' }, 380, 300) },
@@ -388,37 +771,63 @@ export function App() {
     binLevels,
     openBin,
     restore,
+    restoreFile,
     emptyLevel,
     colour,
     setColour,
+    wallpaper: wallpaperFile,
+    setWallpaper,
     iconSize,
     setIconSize,
     screensaver,
     setScreensaver,
     previewScreensaver: () => setSaving(true),
     toyCount: () => liveToys().length,
+    fileById: byId,
+    filesOfKind: (kind) => liveFiles().filter((f) => f.kind === kind),
+    saveText,
   };
 
   return (
     <main
       class="desktop"
+      classList={{ 'is-dropping': dropping() }}
       style={{
-        background: colour(),
+        // Not the `background` shorthand: it would wipe out the tiled picture below it.
+        'background-color': colour(),
+        'background-image': wallpaperFile() ? `url("${wallpaperFile()!.url}")` : undefined,
         '--icon-slot-w': `${slot().w}px`,
         '--icon-slot-h': `${slot().h}px`,
         '--icon-art': `${metrics().art}px`,
         '--icon-label': `${metrics().label}px`,
       }}
-      onPointerDown={startMarquee}
-      onPointerMove={dragMarquee}
-      onPointerUp={endMarquee}
-      onPointerCancel={endMarquee}
+      onPointerDown={(e) => {
+        if (onDesktopItself(e.target)) deskPress.down(e);
+        startMarquee(e);
+      }}
+      onPointerMove={(e) => {
+        deskPress.move(e);
+        dragMarquee(e);
+      }}
+      onPointerUp={() => {
+        deskPress.cancel();
+        endMarquee();
+      }}
+      onPointerCancel={() => {
+        deskPress.cancel();
+        endMarquee();
+      }}
+      onDragOver={onDragOver}
+      onDragLeave={(e) => {
+        // dragleave also fires crossing into a child, which is still inside the desktop.
+        if (!e.relatedTarget || !e.currentTarget.contains(e.relatedTarget as Node)) setDropping(false);
+      }}
+      onDrop={onDrop}
       onContextMenu={(e) => {
         // Right-click belongs to Josh OS everywhere inside the app, but only the
         // desktop itself gets the desktop menu — window chrome just gets silence.
         e.preventDefault();
-        const target = e.target as HTMLElement;
-        if (target.classList.contains('desktop') || target.classList.contains('desktop-icons')) {
+        if (onDesktopItself(e.target)) {
           setSelected([]);
           openMenu(e.clientX, e.clientY, desktopMenu());
         }
@@ -445,6 +854,32 @@ export function App() {
                 deleteGroup(toy.name);
               }}
               onContextMenu={(x, y) => openMenu(x, y, toyMenu(toy))}
+            />
+          )}
+        </For>
+
+        <For each={liveFiles()}>
+          {(file) => (
+            <DesktopIcon
+              label={file.name}
+              // A picture is its own icon, framed like a thumbnail; everything else
+              // gets a glyph sitting straight on the desktop.
+              image={file.kind === 'image' ? file.url : undefined}
+              glyph={glyphFor(file.kind)}
+              bare={file.kind !== 'image'}
+              position={positions[file.id]}
+              selected={isSelected(file.id)}
+              renaming={renaming() === file.id}
+              onRenamed={(name) => endRename(file.id, name)}
+              onSelect={() => selectIcon(file.id)}
+              onOpen={() => openFile(file)}
+              onMove={(x, y) => moveIcons(file.id, x, y)}
+              onDragOverBin={setBinHover}
+              onDropInBin={() => {
+                setBinHover(false);
+                deleteGroup(file.id);
+              }}
+              onContextMenu={(x, y) => openMenu(x, y, fileMenu(file))}
             />
           )}
         </For>
@@ -491,9 +926,18 @@ export function App() {
             onToggleMaximize={() => patch(win.id, { maximized: !win.maximized, z: ++nextZ })}
             onMove={(x, y) => patch(win.id, { x, y })}
             onResize={(x, y, w, h) => patch(win.id, { x, y, w, h })}
+            onRetitle={(title) => patch(win.id, { title })}
           />
         )}
       </For>
+
+      {/* Over the windows, since a drop anywhere lands on the desktop behind them. */}
+      <Show when={dropping()}>
+        <div class="drop-hint">
+          <p>Drop to put it on the desktop</p>
+          <small>Up to {formatBytes(MAX_FILE_BYTES)} a file</small>
+        </div>
+      </Show>
 
       <Show when={menu()}>
         {(m) => (

@@ -29,6 +29,9 @@ body {
   /* Nothing on a desktop is selectable text — dragging draws a marquee instead. */
   -webkit-user-select: none;
   user-select: none;
+  /* A long press is Josh OS's right click, so iOS mustn't answer it first with a
+     copy-or-save sheet of its own. */
+  -webkit-touch-callout: none;
 }
 
 /* Classic raised / sunken bevels ------------------------------------------ */
@@ -68,7 +71,10 @@ body {
   width: 100vw;
   height: 100vh;
   height: 100dvh;
-  background: var(--desktop);
+  background-color: var(--desktop);
+  /* A background picture is always tiled at its own size, as a 1995 desktop would. */
+  background-repeat: repeat;
+  background-size: auto;
   overflow: hidden;
   /* Icon geometry. App overrides these per the icon size setting; the values here
      are the medium default, so the stylesheet still stands on its own. */
@@ -187,7 +193,9 @@ body {
   filter: sepia(1) hue-rotate(190deg) saturate(2.5) drop-shadow(1px 1px 1px rgb(0 0 0 / 0.5));
 }
 
-.icon.is-bin .icon-glyph {
+/* Glyphs standing on the desktop rather than in a tile — the bin, and dropped files. */
+.icon.is-bin .icon-glyph,
+.icon.is-bare .icon-glyph {
   font-size: calc(var(--icon-art) * 0.77);
   line-height: 1;
   filter: drop-shadow(1px 1px 1px rgb(0 0 0 / 0.5));
@@ -227,6 +235,27 @@ body {
 
 .icon.is-selected .icon-art img {
   filter: sepia(1) hue-rotate(190deg) saturate(2.5);
+}
+
+/* An icon's name, being typed over. Sized like the label it stands in for, so nothing
+   shifts as the field appears in its place. */
+.icon-rename {
+  width: 100%;
+  padding: 1px 2px;
+  font-family: inherit;
+  font-size: var(--icon-label);
+  line-height: 1.25;
+  text-align: center;
+  color: #000;
+  background: #fff;
+  border: 1px solid #000;
+  outline: none;
+}
+
+/* The field mustn't disappear under the icon in the next column along. */
+.icon.is-renaming {
+  z-index: 2;
+  cursor: default;
 }
 
 .icon-badge {
@@ -540,6 +569,14 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+/* A file name can run long; it gives way rather than pushing the button out of view. */
+.field-row code {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .field-row input[type='color'] {
@@ -920,6 +957,348 @@ body {
   .task-art {
     margin-right: 0;
   }
+}
+
+/* Dropped files ------------------------------------------------------------ */
+
+/* A file being dragged in from outside. The border is inset so it reads as the
+   desktop offering itself up, rather than as a window. */
+.desktop.is-dropping::after {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border: 3px dashed rgb(255 255 255 / 0.8);
+  pointer-events: none;
+  z-index: 15000;
+}
+
+.drop-hint {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  padding: 14px 22px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+  color: #fff;
+  background: rgb(0 0 0 / 0.55);
+  border: 2px solid;
+  border-color: var(--face-light) var(--face-darker) var(--face-darker) var(--face-light);
+  pointer-events: none;
+  z-index: 15001;
+}
+
+.drop-hint p {
+  margin: 0;
+  font-size: 15px;
+}
+
+.drop-hint small {
+  font-size: 11px;
+  opacity: 0.8;
+}
+
+/* Picture viewer ----------------------------------------------------------- */
+
+.picture-pane {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #2b2b2b;
+}
+
+/* The picture never crops. Anything bigger than the stage is scrolled to instead. */
+.picture-stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  padding: 6px;
+  overflow: auto;
+}
+
+/* auto margins centre the picture without the flex-centring trick that puts the
+   overflowing top-left of a big picture out of the scroller's reach. flex: none
+   keeps it at the size the viewer asked for rather than shrinking it to fit. */
+.picture-stage img {
+  margin: auto;
+  flex: none;
+}
+
+/* A picture with more to it than the window shows can be dragged about. */
+.picture-stage.can-pan {
+  cursor: grab;
+}
+
+.picture-stage.is-panning {
+  cursor: grabbing;
+}
+
+.picture-gone {
+  margin: 0;
+  padding: 20px;
+  text-align: center;
+  font-size: 13px;
+  color: #d8d8d8;
+}
+
+.picture-bar {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  background: var(--face);
+  border-top: 1px solid var(--face-dark);
+}
+
+/* The zoom controls travel together, so a narrow window wraps them as one group. */
+.picture-zoom {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* A sunken readout, the way a 95 toolbar showed the zoom it was sitting at. */
+.picture-zoom-readout {
+  min-width: 46px;
+  padding: 2px 4px;
+  font-size: 12px;
+  text-align: center;
+  color: #000;
+  background: #fff;
+  border: 2px solid;
+  border-color: var(--face-darker) var(--face-light) var(--face-light) var(--face-darker);
+}
+
+.picture-bar .chrome-button,
+.media-bar .chrome-button {
+  height: 26px;
+  min-width: 32px;
+  font-size: 12px;
+}
+
+.picture-bar .chrome-button[aria-disabled='true'],
+.media-bar .chrome-button[aria-disabled='true'] {
+  color: var(--face-dark);
+  text-shadow: 1px 1px 0 #fff;
+  cursor: default;
+}
+
+.picture-status {
+  margin-left: auto;
+  font-size: 12px;
+  color: #000;
+}
+
+/* Media players ------------------------------------------------------------ */
+
+.audio-pane,
+.video-pane {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #04060f;
+}
+
+/* The visualiser and the picture both want all the room going. */
+.audio-stage,
+.video-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.audio-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.video-stage video {
+  max-width: 100%;
+  max-height: 100%;
+  /* Letterboxed rather than cropped, whatever shape the window is dragged into. */
+  object-fit: contain;
+  cursor: pointer;
+}
+
+/* A file the browser has no decoder for. */
+.media-broken {
+  position: absolute;
+  margin: 0;
+  padding: 10px 16px;
+  max-width: 80%;
+  text-align: center;
+  font-size: 13px;
+  color: #fff;
+  background: rgb(0 0 0 / 0.65);
+  border: 2px solid;
+  border-color: var(--face-light) var(--face-darker) var(--face-darker) var(--face-light);
+}
+
+.media-foot {
+  flex: none;
+  background: var(--face);
+  border-top: 1px solid var(--face-dark);
+}
+
+.media-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 6px 4px;
+}
+
+.media-clock {
+  flex: none;
+  font-size: 12px;
+  color: #000;
+  /* So the bar doesn't twitch as the seconds tick over. */
+  font-variant-numeric: tabular-nums;
+}
+
+/* Long file names give way rather than pushing the window out of shape. */
+.media-status {
+  display: block;
+  padding: 0 8px 6px;
+  font-size: 11px;
+  color: #404040;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The scrubber, built out of the same bevels as everything else. */
+.media-scrub {
+  flex: 1;
+  min-width: 50px;
+  height: 20px;
+  margin: 0;
+  appearance: none;
+  background: none;
+  cursor: pointer;
+}
+
+.media-scrub:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.media-scrub::-webkit-slider-runnable-track {
+  height: 6px;
+  background: var(--face-dark);
+  border: 1px solid;
+  border-color: var(--face-darker) var(--face-light) var(--face-light) var(--face-darker);
+}
+
+.media-scrub::-webkit-slider-thumb {
+  appearance: none;
+  width: 12px;
+  height: 18px;
+  margin-top: -7px;
+  background: var(--face);
+  border: 2px solid;
+  border-color: var(--face-light) var(--face-darker) var(--face-darker) var(--face-light);
+}
+
+.media-scrub::-moz-range-track {
+  height: 6px;
+  background: var(--face-dark);
+  border: 1px solid var(--face-darker);
+}
+
+.media-scrub::-moz-range-thumb {
+  width: 10px;
+  height: 16px;
+  border-radius: 0;
+  background: var(--face);
+  border: 2px solid;
+  border-color: var(--face-light) var(--face-darker) var(--face-darker) var(--face-light);
+}
+
+/* Josh's Computer Writing App ---------------------------------------------- */
+
+.writing-pane {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+}
+
+.writing-page {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  padding: 8px;
+  border: none;
+  outline: none;
+  resize: none;
+  font-family: 'Lucida Console', Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #000;
+  background: #fff;
+}
+
+.writing-loading {
+  margin: auto;
+  padding: 20px;
+  font-size: 13px;
+  color: var(--face-dark);
+}
+
+.writing-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 8px;
+  font-size: 12px;
+  background: var(--face);
+  border-top: 1px solid var(--face-dark);
+}
+
+/* Long file names give way to the status rather than pushing it out of the window. */
+.writing-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.writing-status {
+  flex: none;
+  color: #404040;
+}
+
+/* Notices ------------------------------------------------------------------ */
+
+.notice-pane {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 20px;
+  background: var(--face);
+}
+
+.notice-glyph {
+  flex: none;
+  font-size: 34px;
+}
+
+.notice-body {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 /* Screensaver -------------------------------------------------------------- */

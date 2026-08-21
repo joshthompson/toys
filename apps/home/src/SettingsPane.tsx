@@ -22,6 +22,7 @@ const SWATCHES = [
 export function SettingsPane(props: { panes: Panes }) {
   const restoreDefaults = () => {
     props.panes.setColour(DEFAULT_DESKTOP);
+    props.panes.setWallpaper(null);
     props.panes.setIconSize(DEFAULT_ICON_SIZE);
     props.panes.setScreensaver(NO_SCREENSAVER);
   };
@@ -56,6 +57,21 @@ export function SettingsPane(props: { panes: Panes }) {
         />
         <code>{props.panes.colour()}</code>
       </label>
+
+      <div class="field-row">
+        Background
+        <code>{props.panes.wallpaper()?.name ?? 'None'}</code>
+        <button
+          class="chrome-button"
+          aria-disabled={!props.panes.wallpaper()}
+          onClick={() => props.panes.wallpaper() && props.panes.setWallpaper(null)}
+        >
+          Remove
+        </button>
+      </div>
+      <p class="field-hint">
+        Right-click a picture on the desktop to use it. Backgrounds are always tiled.
+      </p>
 
       <label class="field-row">
         Icon size

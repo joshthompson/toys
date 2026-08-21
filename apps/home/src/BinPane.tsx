@@ -1,5 +1,5 @@
 import { For, Show } from 'solid-js';
-import { BIN_GLYPH, binName, type Panes } from './shell';
+import { BIN_GLYPH, binName, glyphFor, type Panes } from './shell';
 import { resolve, artwork } from './toys';
 
 type Props = {
@@ -11,7 +11,11 @@ export function BinPane(props: Props) {
   const level = () => props.panes.binLevels()[props.depth];
   /** Every bin below the top one holds the previous bin, plus whatever was dropped on it. */
   const nested = () => props.depth > 0;
-  const isEmpty = () => !nested() && !level().toys.length;
+  /** Binned toys and files, plus the nested bin if there is one. */
+  const count = () => level().toys.length + level().files.length + (nested() ? 1 : 0);
+  const isEmpty = () => !count();
+  /** Emptying a bin destroys the files in it outright, so say so before it's clicked. */
+  const emptyable = () => level().toys.length + level().files.length > 0;
 
   return (
     <div class="bin-pane">
@@ -23,7 +27,7 @@ export function BinPane(props: Props) {
               {BIN_GLYPH}
             </span>
             {binName(props.depth)} is empty.
-            <small>Drag a toy onto the bin, or right-click one and pick Delete.</small>
+            <small>Drag a toy or a file onto the bin, or right-click one and pick Delete.</small>
           </p>
         }
       >
@@ -63,17 +67,38 @@ export function BinPane(props: Props) {
               </li>
             )}
           </For>
+
+          <For each={level().files}>
+            {(file) => (
+              <li class="bin-row">
+                <Show
+                  when={file.kind === 'image'}
+                  fallback={
+                    <span class="bin-row-art is-glyph" aria-hidden="true">
+                      {glyphFor(file.kind)}
+                    </span>
+                  }
+                >
+                  <img class="bin-row-art" src={file.url} alt="" />
+                </Show>
+                <span class="bin-row-name">{file.name}</span>
+                <button class="chrome-button" onClick={() => props.panes.restoreFile(file.id)}>
+                  Put back
+                </button>
+              </li>
+            )}
+          </For>
         </ul>
 
         <footer class="bin-actions">
           <span class="bin-status">
-            {level().toys.length + (nested() ? 1 : 0)} item
-            {level().toys.length + (nested() ? 1 : 0) === 1 ? '' : 's'}
+            {count()} item{count() === 1 ? '' : 's'}
           </span>
           <button
             class="chrome-button"
-            aria-disabled={!level().toys.length}
-            onClick={() => level().toys.length && props.panes.emptyLevel(props.depth)}
+            title={level().files.length ? 'Deletes the files in here for good' : undefined}
+            aria-disabled={!emptyable()}
+            onClick={() => emptyable() && props.panes.emptyLevel(props.depth)}
           >
             Empty
           </button>

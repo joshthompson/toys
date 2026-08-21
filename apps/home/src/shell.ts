@@ -6,10 +6,27 @@
  * and any pane reading one at module-eval time (a `const` array of swatches, say)
  * would hit the temporal dead zone and blow up at boot.
  */
+import type { DesktopFile, FileKind } from './files';
 import type { Toy } from './toys';
 
 export const BIN_KEY = '__bin__';
 export const BIN_GLYPH = '🗑️';
+/**
+ * The icon a dropped file gets, by kind. Pictures are the exception — they're drawn as
+ * their own thumbnail, so they never reach this.
+ */
+export const glyphFor = (kind: FileKind) =>
+  ({ image: '🖼️', audio: '🎵', video: '🎬', text: '📝', other: '📄' })[kind];
+
+/**
+ * The apps that open a dropped file. Named here because both the desktop and the app
+ * itself build window titles out of them, and a media window renames itself as you
+ * step through the desktop's other files of the same kind.
+ */
+export const IMAGE_APP = "Josh's Image Looking App";
+export const WRITING_APP = "Josh's Computer Writing App";
+export const AUDIO_APP = "Josh's Listening To Stuff App";
+export const VIDEO_APP = "Josh's Video Playback App";
 export const DEFAULT_DESKTOP = '#3c8585';
 export const TASKBAR_HEIGHT = 40;
 
@@ -54,7 +71,17 @@ export type WindowContent =
   | { type: 'toy'; toy: Toy }
   | { type: 'bin'; depth: number }
   | { type: 'settings' }
-  | { type: 'about' };
+  | { type: 'about' }
+  /** A dropped image, and every other picture on the desktop behind it. */
+  | { type: 'picture'; fileId: string }
+  /** A dropped text file, open in Josh's Computer Writing App. */
+  | { type: 'writing'; fileId: string }
+  /** A dropped sound, with a worm dancing to it. */
+  | { type: 'audio'; fileId: string }
+  /** A dropped video, playing. */
+  | { type: 'video'; fileId: string }
+  /** The nearest thing this desktop has to an error dialog. */
+  | { type: 'notice'; body: string };
 
 export type WindowState = {
   id: number;
@@ -74,16 +101,21 @@ export type WindowState = {
  * outermost bin a new level is pushed that contains it, so every level keeps its
  * own contents intact however deeply it ends up nested.
  */
-export type BinLevel = { toys: Toy[] };
+export type BinLevel = { toys: Toy[]; files: DesktopFile[] };
 
 /** Everything the non-toy window panes need from the desktop. */
 export type Panes = {
   binLevels: () => BinLevel[];
   openBin: (depth: number) => void;
   restore: (name: string) => void;
+  restoreFile: (id: string) => void;
   emptyLevel: (depth: number) => void;
   colour: () => string;
   setColour: (colour: string) => void;
+  /** The picture being tiled across the desktop, if one is. */
+  wallpaper: () => DesktopFile | undefined;
+  /** A picture on the desktop to tile, or null to go back to the plain colour. */
+  setWallpaper: (id: string | null) => void;
   iconSize: () => IconSize;
   setIconSize: (size: IconSize) => void;
   /** A screensaver id from the registry in ./screensavers, or NO_SCREENSAVER. */
@@ -92,4 +124,13 @@ export type Panes = {
   /** Hand the screen to the chosen screensaver now, without waiting to go idle. */
   previewScreensaver: () => void;
   toyCount: () => number;
+  /** A file still on the desktop, or nothing if it's been binned since the window opened. */
+  fileById: (id: string) => DesktopFile | undefined;
+  /**
+   * The desktop's files of one kind, in icon order. The media apps treat the desktop as
+   * the folder they're flicking through, so this is their prev/next list.
+   */
+  filesOfKind: (kind: FileKind) => DesktopFile[];
+  /** Write the writing app's text back to the file it came from. */
+  saveText: (id: string, text: string) => void;
 };

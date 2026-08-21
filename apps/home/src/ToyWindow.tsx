@@ -3,6 +3,11 @@ import { TASKBAR_HEIGHT, type Panes, type WindowState } from './shell';
 import { BinPane } from './BinPane';
 import { SettingsPane } from './SettingsPane';
 import { AboutPane } from './AboutPane';
+import { PicturePane } from './PicturePane';
+import { WritingPane } from './WritingPane';
+import { AudioPane } from './AudioPane';
+import { VideoPane } from './VideoPane';
+import { NoticePane } from './NoticePane';
 import { embedUrl, resolve } from './toys';
 
 type Props = {
@@ -15,6 +20,8 @@ type Props = {
   onToggleMaximize: () => void;
   onMove: (x: number, y: number) => void;
   onResize: (x: number, y: number, w: number, h: number) => void;
+  /** For the picture viewer, whose window is named after whichever picture it's on. */
+  onRetitle: (title: string) => void;
 };
 
 export const MIN_W = 240;
@@ -43,6 +50,10 @@ export function ToyWindow(props: Props) {
   const toy = () => (props.win.content.type === 'toy' ? props.win.content.toy : null);
   const binDepth = () =>
     props.win.content.type === 'bin' ? { depth: props.win.content.depth } : null;
+  /** The file a picture, writing or media window is looking at. */
+  const fileWindow = (type: 'picture' | 'writing' | 'audio' | 'video') =>
+    props.win.content.type === type ? { id: props.win.content.fileId } : null;
+  const notice = () => (props.win.content.type === 'notice' ? props.win.content.body : null);
   const src = () => {
     const t = toy();
     return t ? embedUrl(t.iframe ?? t.href ?? '') : '';
@@ -201,6 +212,26 @@ export function ToyWindow(props: Props) {
           <Match when={props.win.content.type === 'about'}>
             <AboutPane panes={props.panes} />
           </Match>
+          {/* Wrapped for the same reason as the bin: the payload has to be truthy. */}
+          <Match when={fileWindow('picture')}>
+            {(file) => (
+              <PicturePane fileId={file().id} panes={props.panes} onTitle={props.onRetitle} />
+            )}
+          </Match>
+          <Match when={fileWindow('writing')}>
+            {(file) => <WritingPane fileId={file().id} panes={props.panes} />}
+          </Match>
+          <Match when={fileWindow('audio')}>
+            {(file) => (
+              <AudioPane fileId={file().id} panes={props.panes} onTitle={props.onRetitle} />
+            )}
+          </Match>
+          <Match when={fileWindow('video')}>
+            {(file) => (
+              <VideoPane fileId={file().id} panes={props.panes} onTitle={props.onRetitle} />
+            )}
+          </Match>
+          <Match when={notice()}>{(body) => <NoticePane body={body()} />}</Match>
         </Switch>
       </div>
 
