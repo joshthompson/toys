@@ -1,8 +1,9 @@
 import { createSignal, For, onCleanup, onMount } from 'solid-js';
 import { generateTerrain } from './terrain';
 import { createSim, type Sim } from './sim';
-import { createRenderer, type Preview } from './render';
+import { createRenderer, type Draw, type Preview } from './render';
 import { CELL } from './scale';
+import { maxFileBytes, onMenu, saveToDesktop, setMenus } from './os';
 
 /** Simulation steps per animation frame at 1x, and the time each one advances. */
 const SUBSTEPS = 3;
@@ -44,6 +45,18 @@ const PICK = 4;
 
 const randomSeed = () => Math.floor(Math.random() * 0xffffff);
 
+/**
+ * A name for a saved map: 'River 2026-08-21 20-15-32.png'. Stamped to the second so
+ * saving twice never puts two icons with the same name on the desktop.
+ */
+const imageName = () => {
+  const now = new Date();
+  const pad = (n: number) => `${n}`.padStart(2, '0');
+  const date = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  const time = `${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
+  return `River ${date} ${time}`;
+};
+
 export const App = () => {
   let canvas!: HTMLCanvasElement;
 
@@ -64,7 +77,14 @@ export const App = () => {
   const [preview, setPreview] = createSignal<Preview>(null);
 
   let sim: Sim | null = null;
-  let draw: (preview?: Preview) => void = () => {};
+  let draw: Draw = () => {};
+  /** The seed the landscape on screen was grown from, so it can be regrown at a new size. */
+  let seed = 0;
+  /**
+   * Has anyone put anything on this map — a spring, a dam? Until they have there is no
+   * work here to protect, and a resize needs no permission to refit the landscape.
+   */
+  let touched = false;
 
   /** The grid that would fill the window as it is now. */
   const windowCells = () => ({
@@ -72,8 +92,32 @@ export const App = () => {
     rows: Math.max(32, Math.ceil(window.innerHeight / CELL)),
   });
 
+  /**
+   * The map as it stands, onto the desktop as a picture.
+   *
+   * The canvas is the full landscape at device resolution, which on a big screen is a
+   * PNG of some millions of pixels — enough to come out over whatever the desktop will
+   * take. So it is offered as a PNG first and re-encoded as a JPEG if that happens,
+   * since a map you can save is worth more than a lossless one you can't.
+   */
+  const saveImage = () => {
+    // Repaint without the spring rings, and without the dam line if one is mid-drag:
+    // both are aids for aiming a pointer, and neither is part of the landscape. toBlob
+    // takes its snapshot as it is called, and the animation loop paints the rings back
+    // on the very next frame, so nothing is visibly missing.
+    draw(null, { markers: false });
+    canvas.toBlob(png => {
+      if (!png) return;
+      const cap = maxFileBytes();
+      if (!cap || png.size <= cap) return saveToDesktop(`${imageName()}.png`, png);
+      canvas.toBlob(jpeg => jpeg && saveToDesktop(`${imageName()}.jpg`, jpeg), 'image/jpeg', 0.92);
+    }, 'image/png');
+  };
+
   /** (Re)build the world at the current window size. */
-  const build = (seed: number) => {
+  const build = (from: number) => {
+    seed = from;
+    touched = false;
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const { cols, rows } = windowCells();
 
@@ -84,7 +128,7 @@ export const App = () => {
     canvas.width = Math.round(cols * CELL * dpr);
     canvas.height = Math.round(rows * CELL * dpr);
 
-    sim = createSim(cols, rows, generateTerrain(cols, rows, seed));
+    sim = createSim(cols, rows, generateTerrain(cols, rows, from));
     draw = createRenderer(canvas, sim).draw;
     setResized(false);
     showScrollbars();
@@ -126,6 +170,7 @@ export const App = () => {
     if (!sim) return;
     const cell = cellAt(e);
     if (!cell) return;
+    touched = true;
 
     // Shift-click or right-click takes a spring away again.
     if (e.shiftKey || e.button === 2) {
@@ -205,6 +250,14 @@ export const App = () => {
         if (!sim) return;
         const wanted = windowCells();
         if (wanted.cols === sim.cols && wanted.rows === sim.rows) return;
+
+        // An untouched landscape is nobody's work, so it is refitted without asking.
+        // Same seed, so it comes back as the same hills and coastline sampled to the
+        // new grid rather than as somewhere else. This is the usual case in Josh OS,
+        // where the window loses a couple of dozen pixels to a menu bar a moment after
+        // the toy loads — not something to interrupt anyone about.
+        if (!touched) return build(seed);
+
         setResized(true);
         // Make the rest of the map reachable straight away, while the question stands.
         showScrollbars();
@@ -226,6 +279,12 @@ export const App = () => {
     };
     window.addEventListener('keydown', onKey);
     onCleanup(() => window.removeEventListener('keydown', onKey));
+
+    // Framed in Josh OS, the toy gets a menu bar. On its own, both of these do nothing.
+    setMenus([{ label: 'File', items: [{ id: 'save-image', label: 'Save Image' }] }]);
+    onMenu(id => {
+      if (id === 'save-image') saveImage();
+    });
   });
 
   return (

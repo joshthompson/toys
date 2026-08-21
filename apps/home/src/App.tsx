@@ -787,6 +787,9 @@ export function App() {
     filesOfKind: (kind) => liveFiles().filter((f) => f.kind === kind),
     saveText,
     showText: (title, body) => spawn(title, { type: 'text', body }, 420, 340),
+    // A File carries the name a Blob hasn't got, and from there it's a drop like any
+    // other: the size limit, the free slot, the write to IndexedDB, all of it.
+    saveToDesktop: (name, blob) => acceptFiles([new File([blob], name, { type: blob.type })]),
   };
 
   return (

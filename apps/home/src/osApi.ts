@@ -30,11 +30,18 @@ export type FromApp =
   /** Open one of the OS's own text windows: the rules, an about box, credits. */
   | { type: 'text'; title: string; body: string }
   /** Rename the window this app is sitting in. */
-  | { type: 'title'; title: string };
+  | { type: 'title'; title: string }
+  /**
+   * Put a file on the desktop, as though it had been dropped there. The blob travels
+   * as itself — structured clone carries one across origins, so there's no need for an
+   * app to base64 a picture into a string and no 33% to pay for doing it.
+   */
+  | { type: 'save'; name: string; blob: Blob };
 
 /** What the OS says back. */
 export type FromOs =
-  | { type: 'hello'; version: number; title: string }
+  /** `maxFileBytes` is there so an app can size what it saves before it sends it. */
+  | { type: 'hello'; version: number; title: string; maxFileBytes: number }
   /** Somebody picked one of the app's own menu items. */
   | { type: 'menu'; id: string };
 
@@ -45,12 +52,32 @@ const MAX_LABEL = 48;
 const MAX_ID = 64;
 const MAX_TITLE = 80;
 const MAX_BODY = 20_000;
+const MAX_NAME = 64;
 
 /** The string, trimmed to length, or nothing if it wasn't a usable string at all. */
 const text = (value: unknown, limit: number) => {
   if (typeof value !== 'string') return null;
   const trimmed = value.trim();
   return trimmed ? trimmed.slice(0, limit) : null;
+};
+
+/**
+ * A name fit to sit under an icon. The file itself goes into IndexedDB under an id the
+ * desktop generates, so this never reaches a filesystem — but a name is a label, not a
+ * path, so anything that looks like one loses everything up to its last slash, and the
+ * control characters that would break the label go with it.
+ */
+const fileName = (value: unknown) => {
+  const raw = text(value, MAX_NAME * 4);
+  if (!raw) return null;
+  const cleaned = raw
+    .split(/[/\\]/)
+    .pop()!
+    .replace(/[\u0000-\u001f\u007f]/g, '')
+    .trim()
+    .slice(0, MAX_NAME);
+  // A run of dots names a directory rather than a file, whatever else it looks like.
+  return cleaned && !/^\.+$/.test(cleaned) ? cleaned : null;
 };
 
 const parseItem = (value: unknown): MenuItem | null => {
@@ -106,6 +133,14 @@ export function parseFromApp(data: unknown): FromApp | null {
     case 'title': {
       const title = text(raw.title, MAX_TITLE);
       return title ? { type: 'title', title } : null;
+    }
+
+    case 'save': {
+      // Not sized here: the desktop has one limit for everything that lands on it, and
+      // one message telling you the file was too big.
+      if (!(raw.blob instanceof Blob)) return null;
+      const name = fileName(raw.name);
+      return name ? { type: 'save', name, blob: raw.blob } : null;
     }
 
     default:

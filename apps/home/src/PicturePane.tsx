@@ -1,5 +1,6 @@
 import { createSignal, onCleanup, onMount, Show } from 'solid-js';
 import { formatBytes } from './files';
+import type { Menu } from './osApi';
 import { IMAGE_APP, type Panes } from './shell';
 
 type Props = {
@@ -7,6 +8,11 @@ type Props = {
   fileId: string;
   panes: Panes;
   onTitle: (title: string) => void;
+  /**
+   * Hand the window a menu bar. The menus go as an accessor rather than a list, so the
+   * bar reads the labels and the greyed-out items off the viewer's state as it moves.
+   */
+  onMenus: (menus: () => Menu[], select: (id: string) => void) => void;
 };
 
 /** How far up or down an arrow key moves a picture too big for its window. */
@@ -21,9 +27,8 @@ const STOPS = [0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8];
  * The desktop is the only folder this computer has, so the arrows walk the pictures
  * sitting on it, in icon order, wrapping round at both ends.
  *
- * Pictures hang at their own pixel size, so anything bigger than the window is
- * scrolled to rather than shrunk. The zoom buttons change that size, and Fit puts
- * the whole picture back inside the window.
+ * A picture opens fitted to the window, and is never blown up past its own size to get
+ * there. Zoom in beyond the fit and the picture is scrolled to rather than shrunk.
  *
  * Left and right always mean the picture before and the picture after, whatever the
  * zoom. Getting around a picture too big for the window is up and down, the wheel, or
@@ -32,7 +37,7 @@ const STOPS = [0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8];
 export function PicturePane(props: Props) {
   const [id, setId] = createSignal(props.fileId);
   /** A scale, or 'fit' for however much of the window the picture happens to need. */
-  const [zoom, setZoom] = createSignal<number | 'fit'>(1);
+  const [zoom, setZoom] = createSignal<number | 'fit'>('fit');
   /** The picture's own pixel size, once the browser has decoded it. */
   const [natural, setNatural] = createSignal<{ w: number; h: number }>();
   /** The stage's content box, watched so 'fit' keeps up with the window being resized. */
@@ -41,6 +46,7 @@ export function PicturePane(props: Props) {
   const [panning, setPanning] = createSignal(false);
   let frame!: HTMLDivElement;
   let stage!: HTMLDivElement;
+
 
   const pictures = () => props.panes.filesOfKind('image');
   /**
@@ -131,7 +137,76 @@ export function PicturePane(props: Props) {
     show(all[next]);
   };
 
+  /** Already tiled across the desktop, so there's nothing to do to it again. */
+  const isWallpaper = () => props.panes.wallpaper()?.id === id();
+
+  /**
+   * Save the picture onto the computer this desktop is pretending to be. The blob URL
+   * is already sitting on the file, so this is a link and a click — built here and
+   * thrown away, since nothing on screen needs to be a link. Firefox only follows the
+   * click of an anchor that's in the document, hence the visit.
+   */
+  const download = () => {
+    const file = current();
+    if (!file) return;
+    const link = document.createElement('a');
+    link.href = file.url;
+    link.download = file.name;
+    document.body.append(link);
+    link.click();
+    link.remove();
+  };
+
+  /**
+   * The menu bar, which offers what the bar along the bottom offers. Everything is in
+   * both places on purpose: the buttons are quicker, and the menu is where you look
+   * when you don't already know a picture viewer has them.
+   */
+  const menus = (): Menu[] => [
+    {
+      label: 'File',
+      items: [
+        { id: 'download', label: 'Download Picture', disabled: !current() },
+        {
+          id: 'wallpaper',
+          label: 'Make Desktop Background',
+          disabled: !current() || isWallpaper(),
+        },
+      ],
+    },
+    {
+      label: 'View',
+      items: [
+        { id: 'prev', label: 'Previous Picture', disabled: pictures().length < 2 },
+        { id: 'next', label: 'Next Picture', disabled: pictures().length < 2 },
+        { separator: true },
+        { id: 'zoom-in', label: 'Zoom In', disabled: !current() || !nextStop(1) },
+        { id: 'zoom-out', label: 'Zoom Out', disabled: !current() || !nextStop(-1) },
+        { separator: true },
+        { id: 'fit', label: 'Fit to Window', disabled: !current() || zoom() === 'fit' },
+        { id: 'actual', label: 'Actual Size', disabled: !current() || zoom() === 1 },
+      ],
+    },
+  ];
+
+  const onMenuSelect = (pick: string) => {
+    if (pick === 'download') download();
+    else if (pick === 'wallpaper' && current()) props.panes.setWallpaper(id());
+    else if (pick === 'prev') step(-1);
+    else if (pick === 'next') step(1);
+    else if (pick === 'zoom-in') stepZoom(1);
+    else if (pick === 'zoom-out') stepZoom(-1);
+    else if (pick === 'fit') setZoom('fit');
+    else if (pick === 'actual') setZoom(1);
+
+    // The menu bar lives in the window chrome, outside this pane, so picking something
+    // off it leaves the keys with a menu button. Hand them back.
+    frame.focus();
+  };
+
   onMount(() => {
+    props.onMenus(menus, onMenuSelect);
+
     // So the arrow keys work the moment the window opens.
     frame.focus();
 
@@ -265,19 +340,6 @@ export function PicturePane(props: Props) {
             {zoom() === 'fit' ? 'Actual Size' : 'Fit'}
           </button>
         </span>
-
-        <button
-          class="chrome-button"
-          title={
-            props.panes.wallpaper()?.id === id()
-              ? 'Already the desktop background'
-              : 'Tile this picture across the desktop'
-          }
-          aria-disabled={!current() || props.panes.wallpaper()?.id === id()}
-          onClick={() => current() && props.panes.setWallpaper(id())}
-        >
-          Make Desktop Background
-        </button>
 
         <span class="picture-status">
           <Show when={current()} fallback="Gone">

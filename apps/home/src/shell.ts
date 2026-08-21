@@ -141,4 +141,6 @@ export type Panes = {
   /** Open a window that just says something. Titles are unique, so asking twice
       raises the window that's already up rather than stacking another on it. */
   showText: (title: string, body: string) => void;
+  /** Put a file on the desktop, exactly as though it had been dropped there. */
+  saveToDesktop: (name: string, blob: Blob) => void;
 };

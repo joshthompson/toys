@@ -20,6 +20,9 @@ const VISIBLE = 0.005;
 /** A dam being dragged out but not yet built, in cell coordinates. */
 export type Preview = { x0: number; y0: number; x1: number; y1: number } | null;
 
+/** Paint one frame. See `draw` below for what the options leave out. */
+export type Draw = (preview?: Preview, options?: { markers?: boolean }) => void;
+
 export const createRenderer = (canvas: HTMLCanvasElement, sim: Sim) => {
   const { cols, rows, water } = sim;
   const size = cols * rows;
@@ -54,7 +57,12 @@ export const createRenderer = (canvas: HTMLCanvasElement, sim: Sim) => {
   // Lay down the dry landscape once. From here on only the wet parts are revisited.
   for (let i = 0; i < size; i++) cell(i);
 
-  const draw = (preview: Preview = null) => {
+  /**
+   * Paint a frame. `markers` off leaves out the spring rings and takes nothing else
+   * with it — they are a pointer aid for finding a source you put in a dip, not part
+   * of the landscape, so a picture of the landscape should not have them in it.
+   */
+  const draw: Draw = (preview = null, { markers = true } = {}) => {
     // A dam can go up on dry ground, which the wet-cell test below would never revisit.
     if (sim.revision !== drawnRevision) {
       drawnRevision = sim.revision;
@@ -100,6 +108,7 @@ export const createRenderer = (canvas: HTMLCanvasElement, sim: Sim) => {
     }
 
     // Spring markers, so a source you placed in a dip is still findable.
+    if (!markers) return;
     ctx.lineWidth = Math.max(1, unit * 0.4);
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
     for (const s of sim.sources) {

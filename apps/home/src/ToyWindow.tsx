@@ -7,10 +7,11 @@ import { PicturePane } from './PicturePane';
 import { WritingPane } from './WritingPane';
 import { AudioPane } from './AudioPane';
 import { VideoPane } from './VideoPane';
+import { MAX_FILE_BYTES } from './files';
 import { NoticePane } from './NoticePane';
 import { TextPane } from './TextPane';
 import { MenuBar } from './MenuBar';
-import { envelope, parseFromApp, type FromOs, type Menu } from './osApi';
+import { envelope, parseFromApp, type FromOs, type Menu, type MenuItem } from './osApi';
 import { embedUrl, resolve } from './toys';
 
 type Props = {
@@ -71,6 +72,14 @@ export function ToyWindow(props: Props) {
 
   /** Whatever menus the framed app has asked for. Empty until it asks, if it ever does. */
   const [appMenus, setAppMenus] = createSignal<Menu[]>([]);
+  /**
+   * The same thing for a pane the OS draws itself, which has no postMessage to send and
+   * no need of one: it hands over an accessor, so its menus stay live as its state moves.
+   */
+  const [paneMenus, setPaneMenus] = createSignal<{
+    menus: () => Menu[];
+    select: (id: string) => void;
+  }>();
   let frame: HTMLIFrameElement | undefined;
 
   /**
@@ -81,8 +90,10 @@ export function ToyWindow(props: Props) {
   const windowMenu = (): Menu => ({
     label: 'Window',
     items: [
-      { id: OS_ITEM.newTab, label: 'Open in New Tab' },
-      { separator: true },
+      // Only a framed toy is hosted anywhere else to be opened.
+      ...(toy()
+        ? ([{ id: OS_ITEM.newTab, label: 'Open in New Tab' }, { separator: true }] as MenuItem[])
+        : []),
       { id: OS_ITEM.minimise, label: 'Minimise' },
       { id: OS_ITEM.maximise, label: props.win.maximized ? 'Restore' : 'Maximise' },
       { separator: true },
@@ -90,7 +101,11 @@ export function ToyWindow(props: Props) {
     ],
   });
 
-  const menus = () => (appMenus().length ? [...appMenus(), windowMenu()] : []);
+  /** What the bar draws: whatever is inside this window, and then the window's own. */
+  const menus = () => {
+    const inside = paneMenus()?.menus() ?? appMenus();
+    return inside.length ? [...inside, windowMenu()] : [];
+  };
 
   /**
    * Where the framed app lives. Naming the origin rather than posting to '*' keeps the
@@ -114,9 +129,11 @@ export function ToyWindow(props: Props) {
     else if (id === OS_ITEM.minimise) props.onMinimize();
     else if (id === OS_ITEM.maximise) props.onToggleMaximize();
     else if (id === OS_ITEM.close) props.onClose();
-    // Anything else belongs to the app, which named it and knows what it meant. The
-    // frame gets its focus back on the way out: picking New Game off a menu and then
-    // finding the arrow keys aren't the game's any more would be its own small insult.
+    // Anything else belongs to whatever is inside the window, which named it and knows
+    // what it meant. A framed app gets its focus back on the way out: picking New Game
+    // off a menu and then finding the arrow keys aren't the game's any more would be
+    // its own small insult.
+    else if (paneMenus()) paneMenus()!.select(id);
     else {
       post({ type: 'menu', id });
       frame?.focus();
@@ -134,7 +151,12 @@ export function ToyWindow(props: Props) {
 
       switch (message.type) {
         case 'ready':
-          post({ type: 'hello', version: 1, title: props.win.title });
+          post({
+            type: 'hello',
+            version: 1,
+            title: props.win.title,
+            maxFileBytes: MAX_FILE_BYTES,
+          });
           break;
         case 'menus':
           setAppMenus(message.menus);
@@ -144,6 +166,9 @@ export function ToyWindow(props: Props) {
           break;
         case 'title':
           props.onRetitle(message.title);
+          break;
+        case 'save':
+          props.panes.saveToDesktop(message.name, message.blob);
           break;
       }
     };
@@ -312,7 +337,12 @@ export function ToyWindow(props: Props) {
           {/* Wrapped for the same reason as the bin: the payload has to be truthy. */}
           <Match when={fileWindow('picture')}>
             {(file) => (
-              <PicturePane fileId={file().id} panes={props.panes} onTitle={props.onRetitle} />
+              <PicturePane
+                fileId={file().id}
+                panes={props.panes}
+                onTitle={props.onRetitle}
+                onMenus={(menus, select) => setPaneMenus({ menus, select })}
+              />
             )}
           </Match>
           <Match when={fileWindow('writing')}>
