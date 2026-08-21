@@ -85,6 +85,9 @@ export const resolve = (url: string) => (isExternal(url) ? url : url.replace(/^\
  * Every toy is framed with this hash, so a toy can check
  * `location.hash === '#embedded'` and lay itself out for a small window
  * (hide its own chrome, shrink margins, skip the intro, …).
+ *
+ * A toy that wants more than a layout hint can talk to the desktop over postMessage:
+ * see ./osApi.ts for the menus it can ask for and the windows it can open.
  */
 export const EMBED_HASH = '#embedded';
 

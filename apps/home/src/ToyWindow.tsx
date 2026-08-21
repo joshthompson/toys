@@ -1,4 +1,4 @@
-import { createSignal, For, Match, Show, Switch } from 'solid-js';
+import { createSignal, For, Match, onCleanup, onMount, Show, Switch } from 'solid-js';
 import { TASKBAR_HEIGHT, type Panes, type WindowState } from './shell';
 import { BinPane } from './BinPane';
 import { SettingsPane } from './SettingsPane';
@@ -8,6 +8,9 @@ import { WritingPane } from './WritingPane';
 import { AudioPane } from './AudioPane';
 import { VideoPane } from './VideoPane';
 import { NoticePane } from './NoticePane';
+import { TextPane } from './TextPane';
+import { MenuBar } from './MenuBar';
+import { envelope, parseFromApp, type FromOs, type Menu } from './osApi';
 import { embedUrl, resolve } from './toys';
 
 type Props = {
@@ -26,6 +29,12 @@ type Props = {
 
 export const MIN_W = 240;
 export const MIN_H = 160;
+
+/**
+ * The menu the OS puts on the end of the bar itself, for any app that draws one. An
+ * app never sees these picked — they're the window's own business, not its.
+ */
+const OS_ITEM = { newTab: 'os:new-tab', minimise: 'os:minimise', maximise: 'os:maximise', close: 'os:close' };
 
 /** Resize grips: each letter is a compass edge the handle pulls. */
 const EDGES = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'] as const;
@@ -54,10 +63,94 @@ export function ToyWindow(props: Props) {
   const fileWindow = (type: 'picture' | 'writing' | 'audio' | 'video') =>
     props.win.content.type === type ? { id: props.win.content.fileId } : null;
   const notice = () => (props.win.content.type === 'notice' ? props.win.content.body : null);
+  const text = () => (props.win.content.type === 'text' ? props.win.content.body : null);
   const src = () => {
     const t = toy();
     return t ? embedUrl(t.iframe ?? t.href ?? '') : '';
   };
+
+  /** Whatever menus the framed app has asked for. Empty until it asks, if it ever does. */
+  const [appMenus, setAppMenus] = createSignal<Menu[]>([]);
+  let frame: HTMLIFrameElement | undefined;
+
+  /**
+   * The window's own menu, which an app gets for free the moment it draws a bar. There's
+   * no point offering it to an app that has no bar to hang it on, so a toy that never
+   * sends menus keeps its window exactly as bare as it was.
+   */
+  const windowMenu = (): Menu => ({
+    label: 'Window',
+    items: [
+      { id: OS_ITEM.newTab, label: 'Open in New Tab' },
+      { separator: true },
+      { id: OS_ITEM.minimise, label: 'Minimise' },
+      { id: OS_ITEM.maximise, label: props.win.maximized ? 'Restore' : 'Maximise' },
+      { separator: true },
+      { id: OS_ITEM.close, label: 'Close' },
+    ],
+  });
+
+  const menus = () => (appMenus().length ? [...appMenus(), windowMenu()] : []);
+
+  /**
+   * Where the framed app lives. Naming the origin rather than posting to '*' keeps the
+   * message to the toy we framed, even if it has since navigated somewhere else.
+   */
+  const appOrigin = () => {
+    try {
+      return new URL(src(), location.href).origin;
+    } catch {
+      return null;
+    }
+  };
+
+  const post = (message: FromOs) => {
+    const to = appOrigin();
+    if (to) frame?.contentWindow?.postMessage(envelope(message), to);
+  };
+
+  const onMenuPick = (id: string) => {
+    if (id === OS_ITEM.newTab) window.open(resolve(toy()?.href ?? ''), '_blank', 'noopener');
+    else if (id === OS_ITEM.minimise) props.onMinimize();
+    else if (id === OS_ITEM.maximise) props.onToggleMaximize();
+    else if (id === OS_ITEM.close) props.onClose();
+    // Anything else belongs to the app, which named it and knows what it meant. The
+    // frame gets its focus back on the way out: picking New Game off a menu and then
+    // finding the arrow keys aren't the game's any more would be its own small insult.
+    else {
+      post({ type: 'menu', id });
+      frame?.focus();
+    }
+  };
+
+  // The app's side of the conversation. Matching the source window is what makes this
+  // safe: every window on the desktop hears every message, and only the one that framed
+  // this app will recognise it as its own.
+  onMount(() => {
+    const onMessage = (e: MessageEvent) => {
+      if (!frame || e.source !== frame.contentWindow) return;
+      const message = parseFromApp(e.data);
+      if (!message) return;
+
+      switch (message.type) {
+        case 'ready':
+          post({ type: 'hello', version: 1, title: props.win.title });
+          break;
+        case 'menus':
+          setAppMenus(message.menus);
+          break;
+        case 'text':
+          props.panes.showText(message.title, message.body);
+          break;
+        case 'title':
+          props.onRetitle(message.title);
+          break;
+      }
+    };
+
+    window.addEventListener('message', onMessage);
+    onCleanup(() => window.removeEventListener('message', onMessage));
+  });
 
   const maxBottom = () => window.innerHeight - TASKBAR_HEIGHT;
 
@@ -197,10 +290,14 @@ export function ToyWindow(props: Props) {
         </span>
       </header>
 
+      <Show when={menus().length}>
+        <MenuBar menus={menus()} onSelect={onMenuPick} />
+      </Show>
+
       <div class="window-body" classList={{ 'is-interacting': interacting() }}>
         <Switch>
           <Match when={props.win.content.type === 'toy'}>
-            <iframe src={src()} title={props.win.title} />
+            <iframe ref={frame} src={src()} title={props.win.title} />
           </Match>
           {/* Wrapped in an object because depth 0 is falsy and would never match. */}
           <Match when={binDepth()}>
@@ -232,6 +329,9 @@ export function ToyWindow(props: Props) {
             )}
           </Match>
           <Match when={notice()}>{(body) => <NoticePane body={body()} />}</Match>
+          <Match when={text()}>
+            {(body) => <TextPane body={body()} onClose={props.onClose} />}
+          </Match>
         </Switch>
       </div>
 

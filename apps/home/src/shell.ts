@@ -81,7 +81,12 @@ export type WindowContent =
   /** A dropped video, playing. */
   | { type: 'video'; fileId: string }
   /** The nearest thing this desktop has to an error dialog. */
-  | { type: 'notice'; body: string };
+  | { type: 'notice'; body: string }
+  /**
+   * Words and nothing else — the rules of a game, an about box. Framed apps ask for
+   * one of these over postMessage rather than building a dialog of their own.
+   */
+  | { type: 'text'; body: string };
 
 export type WindowState = {
   id: number;
@@ -133,4 +138,7 @@ export type Panes = {
   filesOfKind: (kind: FileKind) => DesktopFile[];
   /** Write the writing app's text back to the file it came from. */
   saveText: (id: string, text: string) => void;
+  /** Open a window that just says something. Titles are unique, so asking twice
+      raises the window that's already up rather than stacking another on it. */
+  showText: (title: string, body: string) => void;
 };

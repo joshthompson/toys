@@ -786,6 +786,7 @@ export function App() {
     fileById: byId,
     filesOfKind: (kind) => liveFiles().filter((f) => f.kind === kind),
     saveText,
+    showText: (title, body) => spawn(title, { type: 'text', body }, 420, 340),
   };
 
   return (
