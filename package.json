@@ -9,6 +9,7 @@
     "preview": "nx run-many -t build && vite dist --open",
     "preview:watch": "nx run-many -t build && concurrently -k -n build,serve -c blue,green \"nx watch --all -- nx run-many -t build\" \"vite dist --open\"",
     "new-toy": "node tools/new-toy.mjs",
+    "touch-icon": "node tools/touch-icon.mjs",
     "home:serve": "nx serve home",
     "home:build": "nx build home",
     "leek:serve": "nx serve leek",
