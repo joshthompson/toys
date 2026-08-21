@@ -20,6 +20,33 @@
     }
   </script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!--
+    The tab icon, and the icon iOS stamps on the home screen when this desktop is added
+    from Safari's share sheet. Both are relative, like every other asset here, so they
+    resolve at '/' locally and at '/toys/' on Pages — and so the <base> the screensaver
+    routes inject above still points them back at the root.
+
+    They're two files because they want opposite things: the favicon is 32px of pixel
+    art on a transparent background, which is what a tab wants, while iOS wants 180px,
+    flattens transparency onto black — swallowing every black pixel of this particular
+    icon — and masks the corners off. `pnpm touch-icon` derives the second from the
+    first, so the favicon stays the one thing to edit.
+  -->
+  <link rel="icon" type="image/png" href="favicon.png">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+
+  <!--
+    Opened from that home-screen shortcut it launches without Safari's chrome, which is
+    the only way a pretend desktop stands a chance of passing for one. The title is the
+    name offered under the icon; the theme colour is the desktop's own teal.
+  -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Josh OS">
+  <meta name="theme-color" content="#3c8585">
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Love+Ya+Like+A+Sister&display=swap" rel="stylesheet">
