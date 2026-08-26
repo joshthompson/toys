@@ -1,12 +1,15 @@
 import { createSignal, onCleanup, onMount, Show } from 'solid-js';
-import { formatBytes } from './files';
+import { downloadFile, formatBytes } from './files';
 import { createTransport, MediaBar } from './media';
+import type { Menu } from './osApi';
 import { AUDIO_APP, type Panes } from './shell';
 
 type Props = {
   fileId: string;
   panes: Panes;
   onTitle: (title: string) => void;
+  /** Hand the window a menu bar. An accessor, so the greyed-out items keep up. */
+  onMenus: (menus: () => Menu[], select: (id: string) => void) => void;
 };
 
 /** Frequency bins. Small enough that the bars stay chunky rather than hair-thin. */
@@ -61,7 +64,20 @@ export function AudioPane(props: Props) {
     if (thenPlay) audio.addEventListener('canplay', () => transport.play(), { once: true });
   };
 
+  /** The same File menu the other media apps have. */
+  const menus = (): Menu[] => [
+    {
+      label: 'File',
+      items: [{ id: 'download', label: 'Download Sound', disabled: !current() }],
+    },
+  ];
+
   onMount(() => {
+    props.onMenus(menus, (pick) => {
+      const file = current();
+      if (pick === 'download' && file) downloadFile(file);
+    });
+
     transport.attach(audio);
 
     // Run out of track and the next one takes over, as a music player should.

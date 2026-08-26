@@ -3,11 +3,12 @@ import { TASKBAR_HEIGHT, type Panes, type WindowState } from './shell';
 import { BinPane } from './BinPane';
 import { SettingsPane } from './SettingsPane';
 import { AboutPane } from './AboutPane';
+import { MathsPane } from './MathsPane';
+import { CameraPane } from './CameraPane';
 import { PicturePane } from './PicturePane';
 import { WritingPane } from './WritingPane';
 import { AudioPane } from './AudioPane';
 import { VideoPane } from './VideoPane';
-import { MAX_FILE_BYTES } from './files';
 import { NoticePane } from './NoticePane';
 import { TextPane } from './TextPane';
 import { MenuBar } from './MenuBar';
@@ -81,6 +82,7 @@ export function ToyWindow(props: Props) {
     select: (id: string) => void;
   }>();
   let frame: HTMLIFrameElement | undefined;
+  let body: HTMLDivElement | undefined;
 
   /**
    * The window's own menu, which an app gets for free the moment it draws a bar. There's
@@ -151,12 +153,7 @@ export function ToyWindow(props: Props) {
 
       switch (message.type) {
         case 'ready':
-          post({
-            type: 'hello',
-            version: 1,
-            title: props.win.title,
-            maxFileBytes: MAX_FILE_BYTES,
-          });
+          post({ type: 'hello', version: 1, title: props.win.title });
           break;
         case 'menus':
           setAppMenus(message.menus);
@@ -178,6 +175,29 @@ export function ToyWindow(props: Props) {
   });
 
   const maxBottom = () => window.innerHeight - TASKBAR_HEIGHT;
+
+  /**
+   * Give whatever is inside the window the room it has asked for.
+   *
+   * The chrome is measured rather than assumed — a title bar, a menu bar that may or
+   * may not be there, two borders and a margin — because the difference between the
+   * window and the body inside it is exactly that, and it changes per window. The
+   * result still has to fit on the desktop and stay on it, so it's clamped both ways.
+   */
+  const sizeBodyTo = (w: number, h: number) => {
+    if (props.win.maximized || !body) return;
+    const chromeW = props.win.w - body.clientWidth;
+    const chromeH = props.win.h - body.clientHeight;
+
+    const width = Math.max(MIN_W, Math.min(w + chromeW, window.innerWidth - 16));
+    const height = Math.max(MIN_H, Math.min(h + chromeH, maxBottom() - 16));
+    props.onResize(
+      Math.max(0, Math.min(props.win.x, window.innerWidth - width)),
+      Math.max(0, Math.min(props.win.y, maxBottom() - height)),
+      width,
+      height,
+    );
+  };
 
   // Pointer capture keeps move/up events on the grabbed element, so the iframe can
   // never steal them and there are no window-level listeners to clean up.
@@ -319,7 +339,7 @@ export function ToyWindow(props: Props) {
         <MenuBar menus={menus()} onSelect={onMenuPick} />
       </Show>
 
-      <div class="window-body" classList={{ 'is-interacting': interacting() }}>
+      <div class="window-body" ref={body} classList={{ 'is-interacting': interacting() }}>
         <Switch>
           <Match when={props.win.content.type === 'toy'}>
             <iframe ref={frame} src={src()} title={props.win.title} />
@@ -333,6 +353,12 @@ export function ToyWindow(props: Props) {
           </Match>
           <Match when={props.win.content.type === 'about'}>
             <AboutPane panes={props.panes} />
+          </Match>
+          <Match when={props.win.content.type === 'camera'}>
+            <CameraPane panes={props.panes} />
+          </Match>
+          <Match when={props.win.content.type === 'maths'}>
+            <MathsPane />
           </Match>
           {/* Wrapped for the same reason as the bin: the payload has to be truthy. */}
           <Match when={fileWindow('picture')}>
@@ -350,12 +376,23 @@ export function ToyWindow(props: Props) {
           </Match>
           <Match when={fileWindow('audio')}>
             {(file) => (
-              <AudioPane fileId={file().id} panes={props.panes} onTitle={props.onRetitle} />
+              <AudioPane
+                fileId={file().id}
+                panes={props.panes}
+                onTitle={props.onRetitle}
+                onMenus={(menus, select) => setPaneMenus({ menus, select })}
+              />
             )}
           </Match>
           <Match when={fileWindow('video')}>
             {(file) => (
-              <VideoPane fileId={file().id} panes={props.panes} onTitle={props.onRetitle} />
+              <VideoPane
+                fileId={file().id}
+                panes={props.panes}
+                onTitle={props.onRetitle}
+                onMenus={(menus, select) => setPaneMenus({ menus, select })}
+                onSizeToContent={sizeBodyTo}
+              />
             )}
           </Match>
           <Match when={notice()}>{(body) => <NoticePane body={body()} />}</Match>

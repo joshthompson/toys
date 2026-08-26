@@ -25,10 +25,6 @@ export type Menu = { label: string; items: MenuItem[] };
 /** In a Josh OS window? The parent check is what stops a hand-typed hash counting. */
 export const embedded = () => window.location.hash === '#embedded' && window.parent !== window;
 
-/** The biggest file the desktop will take, once it has told us. */
-let limit = 0;
-export const maxFileBytes = () => limit;
-
 const send = (message: object) => {
   if (!embedded()) return;
   // '*' because a toy has no business knowing which host framed it, and there is
@@ -60,8 +56,5 @@ export const onMenu = (handler: (id: string) => void) => {
   });
 };
 
-// Say hello on the way up, and keep the file limit the desktop answers with.
-listen(data => {
-  if (data.type === 'hello' && typeof data.maxFileBytes === 'number') limit = data.maxFileBytes;
-});
+// Say hello on the way up, so the desktop knows there's something in here listening.
 send({ type: 'ready' });

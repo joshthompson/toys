@@ -1,5 +1,5 @@
 import { createSignal, createEffect, onCleanup, For, Show } from 'solid-js';
-import { BIN_GLYPH, type WindowState } from './shell';
+import { BIN_GLYPH, MATHS_APP, MATHS_GLYPH, CAMERA_APP, CAMERA_GLYPH, type WindowState } from './shell';
 import { artwork, isExternal, resolve, type Toy } from './toys';
 
 type Props = {
@@ -8,6 +8,8 @@ type Props = {
   binName: string;
   binCount: number;
   onLaunch: (toy: Toy) => void;
+  onOpenCamera: () => void;
+  onOpenMaths: () => void;
   onOpenBin: () => void;
   onTaskClick: (id: number) => void;
   onShutDown: () => void;
@@ -25,7 +27,15 @@ const POWER_ITEMS = [
 
 /** Task button art for the windows that aren't toys. */
 const glyphFor = (win: WindowState) =>
-  win.content.type === 'bin' ? BIN_GLYPH : win.content.type === 'settings' ? '⚙️' : '★';
+  win.content.type === 'bin'
+    ? BIN_GLYPH
+    : win.content.type === 'settings'
+      ? '⚙️'
+      : win.content.type === 'camera'
+        ? CAMERA_GLYPH
+        : win.content.type === 'maths'
+          ? MATHS_GLYPH
+          : '★';
 
 const formatTime = (d: Date) =>
   d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).toUpperCase();
@@ -112,6 +122,30 @@ export function Taskbar(props: Props) {
               <Show when={props.toys.length}>
                 <li class="start-separator" role="separator" />
               </Show>
+              <li>
+                <button
+                  role="menuitem"
+                  class="start-item"
+                  onClick={() => run(props.onOpenMaths)}
+                >
+                  <span class="start-item-art is-glyph" aria-hidden="true">
+                    {MATHS_GLYPH}
+                  </span>
+                  {MATHS_APP}
+                </button>
+              </li>
+              <li>
+                <button
+                  role="menuitem"
+                  class="start-item"
+                  onClick={() => run(props.onOpenCamera)}
+                >
+                  <span class="start-item-art is-glyph" aria-hidden="true">
+                    {CAMERA_GLYPH}
+                  </span>
+                  {CAMERA_APP}
+                </button>
+              </li>
               <li>
                 <button
                   role="menuitem"

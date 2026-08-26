@@ -26,8 +26,15 @@ import { clear as clearSaved, load, save } from './storage';
 import {
   BIN_GLYPH,
   BIN_KEY,
+  MATHS_APP,
+  MATHS_GLYPH,
+  MATHS_KEY,
+  CAMERA_GLYPH,
+  CAMERA_KEY,
+  FIXED_ICONS,
   DEFAULT_DESKTOP,
   AUDIO_APP,
+  CAMERA_APP,
   DEFAULT_ICON_SIZE,
   ICON_METRICS,
   IMAGE_APP,
@@ -36,6 +43,7 @@ import {
   WRITING_APP,
   binName,
   glyphFor,
+  isFixedIcon,
   isIconSize,
   type BinLevel,
   type IconSize,
@@ -80,38 +88,62 @@ const onScreen = (p: Point, slot: Slot): Point => ({
   y: clamp(p.y, 0, window.innerHeight - TASKBAR_HEIGHT - slot.h),
 });
 
-/** How many icons fit in a column, above the bin's corner. */
+/** The foot of the first column, where the computer's own icons live. */
+const corner = (slot: Slot) => Math.max(8, window.innerHeight - TASKBAR_HEIGHT - 8 - slot.h);
+
+/** How many icons fit in a column, above the fixed ones stacked in the corner. */
 const perColumn = (slot: Slot) =>
-  Math.max(1, Math.floor((Math.max(8, window.innerHeight - TASKBAR_HEIGHT - 8 - slot.h) - 8) / slot.h));
+  Math.max(1, Math.floor((corner(slot) - (FIXED_ICONS.length - 1) * slot.h - 8) / slot.h));
 
-/** Icons down the left in columns, bin in the bottom-left corner. */
-const layout = (keys: string[], slot: Slot): Record<string, Point> => {
-  const positions: Record<string, Point> = {};
-  // Leave the bottom slot of the first column free so the bin doesn't land on an icon.
+/** The top-left of a slot on the grid. */
+const at = (columnFrom: number, i: number, column: number, slot: Slot): Point => ({
+  x: 8 + (columnFrom + Math.floor(i / column)) * slot.w,
+  y: 8 + (i % column) * slot.h,
+});
+
+/**
+ * How the desktop divides itself between the apps and the files.
+ *
+ * The two are different kinds of thing and reading them as one run of icons is harder
+ * work than it needs to be, so the files start their own column and a blank one is left
+ * between the groups to say so. Only where the blank column can be spared, though: on a
+ * narrow desktop the groups close up rather than push the files off the edge of it.
+ */
+const grouping = (apps: number, files: number, slot: Slot) => {
   const column = perColumn(slot);
+  const across = Math.max(1, Math.floor((window.innerWidth - 8) / slot.w));
+  const appColumns = Math.ceil(apps / column);
+  const fileColumns = Math.ceil(files / column);
+  const gap = apps && files && appColumns + 1 + fileColumns <= across ? 1 : 0;
+  return { column, fileColumn: appColumns + gap };
+};
 
-  keys.forEach((key, i) => {
-    positions[key] = {
-      x: 8 + Math.floor(i / column) * slot.w,
-      y: 8 + (i % column) * slot.h,
-    };
+/** Icons down the left in columns, with the computer's own stacked up from the corner. */
+const layout = (apps: string[], files: string[], slot: Slot): Record<string, Point> => {
+  const positions: Record<string, Point> = {};
+  const { column, fileColumn } = grouping(apps.length, files.length, slot);
+
+  // perColumn has already left the bottom of the first column free for the fixed ones.
+  apps.forEach((key, i) => (positions[key] = at(0, i, column, slot)));
+  files.forEach((key, i) => (positions[key] = at(fileColumn, i, column, slot)));
+  FIXED_ICONS.forEach((key, i) => {
+    positions[key] = { x: 8, y: Math.max(8, corner(slot) - i * slot.h) };
   });
-  positions[BIN_KEY] = { x: 8, y: Math.max(8, window.innerHeight - TASKBAR_HEIGHT - 8 - slot.h) };
   return positions;
 };
 
 /**
  * The first slot on the grid nothing is sitting in — where a file goes when it turns
  * up without a position of its own, which is every file on the reload after its drop.
+ * Starts at the column the files belong in, so one arriving on its own joins them
+ * rather than filling a gap left among the apps.
+ *
  * Icons can be dragged anywhere, so "sitting in" means within half a slot of it.
  */
-const freeSlot = (taken: Point[], slot: Slot): Point => {
+const freeSlot = (taken: Point[], slot: Slot, columnFrom = 0): Point => {
   const column = perColumn(slot);
   for (let i = 0; i < column * 40; i++) {
-    const spot = {
-      x: 8 + Math.floor(i / column) * slot.w,
-      y: 8 + (i % column) * slot.h,
-    };
+    const spot = at(columnFrom, i, column, slot);
     const clash = taken.some(
       (p) => Math.abs(p.x - spot.x) < slot.w / 2 && Math.abs(p.y - spot.y) < slot.h / 2,
     );
@@ -135,12 +167,17 @@ export function App() {
   // store writes keep each window's DOM node — and its iframe — alive.
   const [windows, setWindows] = createStore<WindowState[]>([]);
   // Saved positions layer over a fresh layout, so toys added since the last visit
-  // still get a slot instead of stacking up at the origin.
+  // still get a slot instead of stacking up at the origin — except on a desktop saved
+  // before the apps and the files were laid out apart, which is let go of once so the
+  // grouping has somewhere to show itself. Everything dragged after that stays put.
   const [positions, setPositions] = createStore<Record<string, Point>>({
-    ...layout(toys.map((t) => t.name), slot()),
-    ...Object.fromEntries(
-      Object.entries(saved.positions ?? {}).map(([k, p]) => [k, onScreen(p, slot())]),
-    ),
+    // Files arrive from IndexedDB a beat later and find their own slots then.
+    ...layout(toys.map((t) => t.name), [], slot()),
+    ...(saved.grouped
+      ? Object.fromEntries(
+          Object.entries(saved.positions ?? {}).map(([k, p]) => [k, onScreen(p, slot())]),
+        )
+      : {}),
   });
   const [bins, setBins] = createStore<{ toys: string[]; files: string[] }[]>(
     // There is always at least one bin — the rest of the app indexes into it.
@@ -179,6 +216,8 @@ export function App() {
   );
   /** True while the screensaver holds the screen, whether it idled in or was previewed. */
   const [saving, setSaving] = createSignal(false);
+  /** The camera's flash, which is the whole screen going white for a moment. */
+  const [flashing, setFlashing] = createSignal(false);
 
   let nextId = 1;
   let nextZ = 1;
@@ -201,8 +240,13 @@ export function App() {
       files: level.files.map(byId).filter((f): f is DesktopFile => !!f),
     }));
 
-  /** Every icon on the desktop bar the bin, in the order the grid lays them out. */
-  const iconOrder = () => [...liveToys().map((t) => t.name), ...liveFiles().map((f) => f.id)];
+  /** The two groups the desktop lays out, in the order the grid takes them. */
+  const appOrder = () => liveToys().map((t) => t.name);
+  const fileOrder = () => liveFiles().map((f) => f.id);
+  /** Every icon on the desktop bar the computer's own, apps first. */
+  const iconOrder = () => [...appOrder(), ...fileOrder()];
+  /** Which column a file arriving without a position of its own belongs in. */
+  const fileColumn = () => grouping(liveToys().length, liveFiles().length, slot()).fileColumn;
 
   /**
    * The spots the visible icons hold. Positions linger for binned toys, so this reads
@@ -221,8 +265,8 @@ export function App() {
   };
 
   const isSelected = (key: string) => selected().includes(key);
-  /** Everything a marquee can catch: the live toys and files, plus the bin. */
-  const iconKeys = () => [...iconOrder(), BIN_KEY];
+  /** Everything a marquee can catch: the live toys and files, plus the computer's own. */
+  const iconKeys = () => [...iconOrder(), ...FIXED_ICONS];
   /** The selected toys, in desktop order. The bin isn't a toy, so it drops out here. */
   const selectedToys = () => liveToys().filter((t) => isSelected(t.name));
 
@@ -247,6 +291,7 @@ export function App() {
       wallpaper: wallpaper(),
       iconSize: iconSize(),
       screensaver: screensaver(),
+      grouped: true,
     });
   });
 
@@ -280,7 +325,7 @@ export function App() {
     const current = slot();
     if (current === sized) return;
     sized = current;
-    setPositions(layout(iconOrder(), current));
+    setPositions(layout(appOrder(), fileOrder(), current));
   });
 
   // The screensaver waits for the desktop to go quiet; any input at all takes it back.
@@ -318,7 +363,7 @@ export function App() {
     const taken = occupied();
     for (const file of arrived) {
       if (positions[file.id]) continue;
-      const spot = freeSlot(taken, slot());
+      const spot = freeSlot(taken, slot(), fileColumn());
       taken.push(spot);
       setPositions(file.id, spot);
     }
@@ -336,9 +381,7 @@ export function App() {
    * Anything over the size limit is named and refused; everything else is on the
    * desktop the moment it lands, and written to IndexedDB behind it.
    */
-  const acceptFiles = (dropped: File[], at?: Point) => {
-    const tooBig = dropped.filter((f) => f.size > MAX_FILE_BYTES);
-    const taking = dropped.filter((f) => f.size <= MAX_FILE_BYTES);
+  const placeFiles = (taking: File[], at?: Point) => {
     const taken = occupied();
 
     let i = 0;
@@ -359,13 +402,27 @@ export function App() {
       // appears the moment it does reads its position as it renders.
       const spot = at
         ? onScreen({ x: at.x - slot().w / 2 + i * 24, y: at.y - slot().h / 2 + i * 24 }, slot())
-        : freeSlot(taken, slot());
+        : freeSlot(taken, slot(), fileColumn());
       taken.push(spot);
       setPositions(record.id, spot);
       setFiles(files.length, hydrate(record));
       i++;
     }
+  };
 
+  /**
+   * Files arriving from outside, which is where the size limit applies: it's there to
+   * keep a careless drag of a video library off the desktop, not to police what the
+   * computer's own apps make. Anything this desktop produced itself goes straight to
+   * `placeFiles` and is as big as it turned out to be.
+   */
+  const acceptFiles = (dropped: File[], at?: Point) => {
+    placeFiles(
+      dropped.filter((f) => f.size <= MAX_FILE_BYTES),
+      at,
+    );
+
+    const tooBig = dropped.filter((f) => f.size > MAX_FILE_BYTES);
     if (tooBig.length) {
       const named = tooBig.map((f) => `${f.name} (${formatBytes(f.size)})`).join(', ');
       notice(
@@ -482,6 +539,11 @@ export function App() {
 
   const openBin = (depth: number) => spawn(binName(depth), { type: 'bin', depth }, 460, 340);
 
+  // Room for the 200x150 grid at 3x, plus the strip along the bottom.
+  const openCamera = () => spawn(CAMERA_APP, { type: 'camera' }, 640, 540);
+
+  const openMaths = () => spawn(MATHS_APP, { type: 'maths' }, 380, 520);
+
   /** Whichever app takes this kind of file, or a notice that nothing here does. */
   const openFile = (file: DesktopFile) => {
     if (filesInBins().includes(file.id)) return;
@@ -592,7 +654,7 @@ export function App() {
    */
   const deleteGroup = (name: string) =>
     group(name)
-      .filter((k) => k !== BIN_KEY)
+      .filter((k) => !isFixedIcon(k))
       .forEach(binIcon);
 
   /** Deleting the bin doesn't destroy it — it nests it inside a brand new, bigger bin. */
@@ -642,7 +704,7 @@ export function App() {
     for (const k of keys) setPositions(k, { x: positions[k].x + dx, y: positions[k].y + dy });
   };
 
-  const arrangeIcons = () => setPositions(layout(iconOrder(), slot()));
+  const arrangeIcons = () => setPositions(layout(appOrder(), fileOrder(), slot()));
 
   /** Rubber-band selection: press empty desktop, drag a rectangle over the icons. */
   const startMarquee = (e: PointerEvent & { currentTarget: HTMLElement }) => {
@@ -715,7 +777,7 @@ export function App() {
 
   const fileMenu = (file: DesktopFile): MenuEntry[] => {
     // Right-clicking one of several selected icons acts on all of them, toys included.
-    const chosen = group(file.id).filter((k) => k !== BIN_KEY);
+    const chosen = group(file.id).filter((k) => !isFixedIcon(k));
     if (chosen.length > 1) {
       const open = (key: string) => {
         const picked = isFileId(key) ? byId(key) : undefined;
@@ -789,7 +851,8 @@ export function App() {
     showText: (title, body) => spawn(title, { type: 'text', body }, 420, 340),
     // A File carries the name a Blob hasn't got, and from there it's a drop like any
     // other: the size limit, the free slot, the write to IndexedDB, all of it.
-    saveToDesktop: (name, blob) => acceptFiles([new File([blob], name, { type: blob.type })]),
+    saveToDesktop: (name, blob) => placeFiles([new File([blob], name, { type: blob.type })]),
+    flash: setFlashing,
   };
 
   return (
@@ -888,6 +951,31 @@ export function App() {
           )}
         </For>
 
+        {/* The computer's own apps, sitting above the bin rather than out with the toys. */}
+        <DesktopIcon
+          label={MATHS_APP}
+          glyph={MATHS_GLYPH}
+          bare
+          position={positions[MATHS_KEY]}
+          selected={isSelected(MATHS_KEY)}
+          onSelect={() => selectIcon(MATHS_KEY)}
+          onOpen={openMaths}
+          onMove={(x, y) => moveIcons(MATHS_KEY, x, y)}
+          onContextMenu={(x, y) => openMenu(x, y, [{ label: 'Open', onSelect: openMaths }])}
+        />
+
+        <DesktopIcon
+          label={CAMERA_APP}
+          glyph={CAMERA_GLYPH}
+          bare
+          position={positions[CAMERA_KEY]}
+          selected={isSelected(CAMERA_KEY)}
+          onSelect={() => selectIcon(CAMERA_KEY)}
+          onOpen={openCamera}
+          onMove={(x, y) => moveIcons(CAMERA_KEY, x, y)}
+          onContextMenu={(x, y) => openMenu(x, y, [{ label: 'Open', onSelect: openCamera }])}
+        />
+
         <DesktopIcon
           label={binName(topDepth())}
           glyph={BIN_GLYPH}
@@ -955,6 +1043,8 @@ export function App() {
         binName={binName(topDepth())}
         binCount={bins[topDepth()].toys.length + topDepth()}
         onLaunch={openToy}
+        onOpenCamera={openCamera}
+        onOpenMaths={openMaths}
         onOpenBin={() => openBin(topDepth())}
         onTaskClick={onTaskClick}
         onShutDown={shutDown}
@@ -972,6 +1062,13 @@ export function App() {
         {/* Covers the lot, taskbar included — the desktop is gone until the reload. */}
         <PowerScreen mode={power()} onBooted={() => location.reload()} />
       </Show>
+
+      {/*
+        Always here, and almost always invisible. Left in the tree rather than shown and
+        hidden so that going out is a fade rather than a cut — and a fade needs something
+        to fade.
+      */}
+      <div class="screen-flash" classList={{ 'is-lit': flashing() }} />
     </main>
   );
 }

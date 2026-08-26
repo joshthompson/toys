@@ -3,7 +3,7 @@ import { generateTerrain } from './terrain';
 import { createSim, type Sim } from './sim';
 import { createRenderer, type Draw, type Preview } from './render';
 import { CELL } from './scale';
-import { maxFileBytes, onMenu, saveToDesktop, setMenus } from './os';
+import { onMenu, saveToDesktop, setMenus } from './os';
 
 /** Simulation steps per animation frame at 1x, and the time each one advances. */
 const SUBSTEPS = 3;
@@ -93,12 +93,10 @@ export const App = () => {
   });
 
   /**
-   * The map as it stands, onto the desktop as a picture.
-   *
-   * The canvas is the full landscape at device resolution, which on a big screen is a
-   * PNG of some millions of pixels — enough to come out over whatever the desktop will
-   * take. So it is offered as a PNG first and re-encoded as a JPEG if that happens,
-   * since a map you can save is worth more than a lossless one you can't.
+   * The map as it stands, onto the desktop as a picture — the full landscape at device
+   * resolution, which on a big screen is a PNG of some millions of pixels. The desktop
+   * takes what its own apps make whatever size it comes to, so it goes as a PNG and
+   * keeps every cell exactly as it was drawn.
    */
   const saveImage = () => {
     // Repaint without the spring rings, and without the dam line if one is mid-drag:
@@ -106,12 +104,7 @@ export const App = () => {
     // takes its snapshot as it is called, and the animation loop paints the rings back
     // on the very next frame, so nothing is visibly missing.
     draw(null, { markers: false });
-    canvas.toBlob(png => {
-      if (!png) return;
-      const cap = maxFileBytes();
-      if (!cap || png.size <= cap) return saveToDesktop(`${imageName()}.png`, png);
-      canvas.toBlob(jpeg => jpeg && saveToDesktop(`${imageName()}.jpg`, jpeg), 'image/jpeg', 0.92);
-    }, 'image/png');
+    canvas.toBlob(png => png && saveToDesktop(`${imageName()}.png`, png), 'image/png');
   };
 
   /** (Re)build the world at the current window size. */

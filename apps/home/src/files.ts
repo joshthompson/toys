@@ -76,6 +76,22 @@ export const hydrate = (file: StoredFile): DesktopFile => ({
   url: URL.createObjectURL(file.blob),
 });
 
+/**
+ * Save a file off the desktop and onto the computer the desktop is pretending to be.
+ *
+ * The blob: URL is already sitting on the file, so this is a link and a click — built
+ * here and thrown away, since nothing on screen needs to be a link. Firefox only
+ * follows the click of an anchor that is in the document, hence the visit.
+ */
+export const downloadFile = (file: DesktopFile) => {
+  const link = document.createElement('a');
+  link.href = file.url;
+  link.download = file.name;
+  document.body.append(link);
+  link.click();
+  link.remove();
+};
+
 /* IndexedDB ---------------------------------------------------------------- */
 
 const DB_NAME = 'josh-os-files';

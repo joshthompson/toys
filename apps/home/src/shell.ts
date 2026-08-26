@@ -11,6 +11,21 @@ import type { Toy } from './toys';
 
 export const BIN_KEY = '__bin__';
 export const BIN_GLYPH = '🗑️';
+export const CAMERA_KEY = '__camera__';
+export const CAMERA_GLYPH = '📷';
+export const MATHS_KEY = '__maths__';
+export const MATHS_GLYPH = '🧮';
+
+/**
+ * Icons the computer owns rather than the user: the bin and the apps built into the
+ * desktop. They select, they drag, they sit in the corner — but there is nothing behind
+ * them to throw away, so every delete leaves them where they are.
+ *
+ * In the order they stack up from the bottom-left, the bin nearest the floor.
+ */
+export const FIXED_ICONS = [BIN_KEY, CAMERA_KEY, MATHS_KEY];
+
+export const isFixedIcon = (key: string) => FIXED_ICONS.includes(key);
 /**
  * The icon a dropped file gets, by kind. Pictures are the exception — they're drawn as
  * their own thumbnail, so they never reach this.
@@ -27,6 +42,8 @@ export const IMAGE_APP = "Josh's Image Looking App";
 export const WRITING_APP = "Josh's Computer Writing App";
 export const AUDIO_APP = "Josh's Listening To Stuff App";
 export const VIDEO_APP = "Josh's Video Playback App";
+export const CAMERA_APP = "Josh's Camera App";
+export const MATHS_APP = "Josh's Maths App";
 export const DEFAULT_DESKTOP = '#3c8585';
 export const TASKBAR_HEIGHT = 40;
 
@@ -72,6 +89,10 @@ export type WindowContent =
   | { type: 'bin'; depth: number }
   | { type: 'settings' }
   | { type: 'about' }
+  /** The camera, at the resolution this computer believes in. */
+  | { type: 'camera' }
+  /** A calculator that would rather give you a ballpark than a number. */
+  | { type: 'maths' }
   /** A dropped image, and every other picture on the desktop behind it. */
   | { type: 'picture'; fileId: string }
   /** A dropped text file, open in Josh's Computer Writing App. */
@@ -141,6 +162,16 @@ export type Panes = {
   /** Open a window that just says something. Titles are unique, so asking twice
       raises the window that's already up rather than stacking another on it. */
   showText: (title: string, body: string) => void;
-  /** Put a file on the desktop, exactly as though it had been dropped there. */
+  /**
+   * Put a file on the desktop. Not subject to the limit on files dragged in from
+   * outside — that one is about what the desktop will accept from elsewhere, and this
+   * is the computer saving its own work.
+   */
   saveToDesktop: (name: string, blob: Blob) => void;
+  /**
+   * White out the whole screen, taskbar and all. The camera uses it as its flash: the
+   * screen is the only light this computer has, so the more of it that lights up the
+   * better the picture it gets back.
+   */
+  flash: (lit: boolean) => void;
 };

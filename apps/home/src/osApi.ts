@@ -40,8 +40,7 @@ export type FromApp =
 
 /** What the OS says back. */
 export type FromOs =
-  /** `maxFileBytes` is there so an app can size what it saves before it sends it. */
-  | { type: 'hello'; version: number; title: string; maxFileBytes: number }
+  | { type: 'hello'; version: number; title: string }
   /** Somebody picked one of the app's own menu items. */
   | { type: 'menu'; id: string };
 

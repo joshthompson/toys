@@ -27,6 +27,13 @@ export type Saved = {
   iconSize: IconSize;
   /** A screensaver id, or NO_SCREENSAVER. Validated against the registry on the way in. */
   screensaver: string;
+  /**
+   * Whether these positions were laid out with the apps and the files as two groups.
+   * A desktop saved before that was a thing has icons in a single run, and no amount of
+   * grouping in the layout will show through positions that were saved over it — so a
+   * save without this gets one re-flow to bring it into line, and then says so here.
+   */
+  grouped: boolean;
 };
 
 /** Whatever was saved last, or nothing at all — every field is treated as optional on the way in. */

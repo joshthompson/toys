@@ -1,5 +1,5 @@
 import { createSignal, onCleanup, onMount, Show } from 'solid-js';
-import { formatBytes } from './files';
+import { downloadFile, formatBytes } from './files';
 import type { Menu } from './osApi';
 import { IMAGE_APP, type Panes } from './shell';
 
@@ -141,23 +141,6 @@ export function PicturePane(props: Props) {
   const isWallpaper = () => props.panes.wallpaper()?.id === id();
 
   /**
-   * Save the picture onto the computer this desktop is pretending to be. The blob URL
-   * is already sitting on the file, so this is a link and a click — built here and
-   * thrown away, since nothing on screen needs to be a link. Firefox only follows the
-   * click of an anchor that's in the document, hence the visit.
-   */
-  const download = () => {
-    const file = current();
-    if (!file) return;
-    const link = document.createElement('a');
-    link.href = file.url;
-    link.download = file.name;
-    document.body.append(link);
-    link.click();
-    link.remove();
-  };
-
-  /**
    * The menu bar, which offers what the bar along the bottom offers. Everything is in
    * both places on purpose: the buttons are quicker, and the menu is where you look
    * when you don't already know a picture viewer has them.
@@ -190,7 +173,10 @@ export function PicturePane(props: Props) {
   ];
 
   const onMenuSelect = (pick: string) => {
-    if (pick === 'download') download();
+    if (pick === 'download') {
+      const file = current();
+      if (file) downloadFile(file);
+    }
     else if (pick === 'wallpaper' && current()) props.panes.setWallpaper(id());
     else if (pick === 'prev') step(-1);
     else if (pick === 'next') step(1);

@@ -1172,10 +1172,17 @@ body {
   height: 100%;
 }
 
+/*
+ * Letterboxed rather than cropped or spilled, whatever shape the window is dragged
+ * into. Pinned to the stage rather than capped with percentages: a percentage height
+ * against a grid row that sizes itself to its contents resolves to no limit at all,
+ * which let a wide video fill the width and run off the bottom.
+ */
 .video-stage video {
-  max-width: 100%;
-  max-height: 100%;
-  /* Letterboxed rather than cropped, whatever shape the window is dragged into. */
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
   cursor: pointer;
 }
@@ -1514,4 +1521,377 @@ body {
   height: 26px;
   min-width: 76px;
   justify-content: center;
+}
+
+/* Camera ------------------------------------------------------------------- */
+
+.camera-pane {
+  position: relative;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #101010;
+}
+
+.camera-stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: #000;
+  /* So the countdown can be sized against the window rather than the screen. The stage
+     takes its size from the flex row above, never from what's inside it, so containing
+     it costs nothing. */
+  container-type: size;
+}
+
+/* The size is set in the pane, which measures the window and works out the largest
+   whole picture that fits. `pixelated` is the point of the app in one line: every one
+   of those 200 by 150 pixels is drawn as a square. */
+.camera-stage canvas {
+  image-rendering: pixelated;
+  background: #000;
+  /* A self-view is a mirror, because that is what anyone expects of their own face.
+     Only the picture on screen is turned round — the canvas behind it, and so the
+     photograph taken from it, is left as the camera saw it. */
+  transform: scaleX(-1);
+}
+
+/* 3, 2, 1 — over the middle of the picture, in plain numerals you can read at a glance. */
+.camera-count {
+  position: absolute;
+  font-family: var(--chrome-font);
+  font-weight: 700;
+  font-size: clamp(64px, 30cqmin, 180px);
+  line-height: 1;
+  color: #fff;
+  text-shadow: 0 4px 16px rgb(0 0 0 / 0.7);
+  pointer-events: none;
+}
+
+
+
+.camera-message {
+  margin: 0;
+  padding: 16px;
+  max-width: 40ch;
+  text-align: center;
+  font-size: 13px;
+  line-height: 1.45;
+  color: #d8d8d8;
+}
+
+/* Sat over the black canvas while the camera is still making its mind up. */
+.camera-message.is-over {
+  position: absolute;
+}
+
+/* The feed itself is never shown — it's drawn from, a fifth of a megapixel at a time.
+   Kept in the layout rather than display:none, so the browser goes on decoding it. */
+.camera-source {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.camera-bar {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  background: var(--face);
+  border-top: 1px solid var(--face-dark);
+}
+
+.camera-bar .chrome-button {
+  height: 26px;
+  font-size: 12px;
+}
+
+.camera-bar .chrome-button[aria-disabled='true'] {
+  color: var(--face-dark);
+  text-shadow: 1px 1px 0 #fff;
+  cursor: default;
+}
+
+.camera-status {
+  margin-left: auto;
+  font-size: 12px;
+  color: #000;
+}
+
+/* The flash switch and the filter picker, sitting in the bar with the buttons. */
+.camera-check,
+.camera-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: #000;
+  cursor: pointer;
+  user-select: none;
+}
+
+.camera-dials select,
+.camera-pick select {
+  font: inherit;
+  font-size: 12px;
+  height: 24px;
+  padding: 0 2px;
+  background: #fff;
+  border: 2px solid;
+  border-color: var(--face-darker) var(--face-light) var(--face-light) var(--face-darker);
+}
+
+/* The row of dials for whichever filter is on, between the picture and the buttons. */
+.camera-dials {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 16px;
+  padding: 6px 8px;
+  background: var(--face);
+  border-top: 1px solid var(--face-dark);
+  box-shadow: 0 1px 0 #fff inset;
+}
+
+.camera-dials label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #000;
+  user-select: none;
+}
+
+/* A slider with a word at each end wants the room to say both. */
+.camera-dials label.is-wide {
+  flex: 1;
+  min-width: 220px;
+}
+
+.camera-dials label.is-wide input[type='range'] {
+  flex: 1;
+}
+
+/* Numbers vary in width; a fixed column stops the slider shuffling as they change. */
+.camera-dials output {
+  min-width: 34px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Sliders, cut down to something this desktop would recognise: a sunken groove with
+   a raised handle running along it. */
+.camera-dials input[type='range'] {
+  appearance: none;
+  width: 130px;
+  height: 18px;
+  background: none;
+  cursor: pointer;
+}
+
+.camera-dials input[type='range']::-webkit-slider-runnable-track {
+  height: 4px;
+  background: var(--face-dark);
+  border: 1px solid var(--face-darker);
+  border-right-color: #fff;
+  border-bottom-color: #fff;
+}
+
+.camera-dials input[type='range']::-moz-range-track {
+  height: 4px;
+  background: var(--face-dark);
+  border: 1px solid var(--face-darker);
+  border-right-color: #fff;
+  border-bottom-color: #fff;
+}
+
+.camera-dials input[type='range']::-webkit-slider-thumb {
+  appearance: none;
+  width: 11px;
+  height: 18px;
+  margin-top: -8px;
+  background: var(--face);
+  border: 2px solid;
+  border-color: var(--face-light) var(--face-darker) var(--face-darker) var(--face-light);
+  box-shadow: inset 1px 1px 0 #fff, inset -1px -1px 0 var(--face-dark);
+}
+
+.camera-dials input[type='range']::-moz-range-thumb {
+  width: 11px;
+  height: 18px;
+  border-radius: 0;
+  background: var(--face);
+  border: 2px solid;
+  border-color: var(--face-light) var(--face-darker) var(--face-darker) var(--face-light);
+  box-shadow: inset 1px 1px 0 #fff, inset -1px -1px 0 var(--face-dark);
+}
+
+/* The one red thing on this desktop, and it has earned it. */
+.camera-rolling {
+  color: #b00000;
+  font-weight: 700;
+}
+
+/* Camera flash ------------------------------------------------------------- */
+
+/*
+ * The screen, used as a lamp. Everything goes: windows, taskbar, wallpaper — the more
+ * of the screen that lights up, the more light lands on whoever is in front of it, and
+ * the shutter effect is a side benefit. Above every other layer on the desktop, since
+ * a lamp with a window in front of it is not a lamp. Snaps on, fades out.
+ */
+.screen-flash {
+  position: fixed;
+  inset: 0;
+  z-index: 25000;
+  background: #fff;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 300ms ease-out;
+}
+
+.screen-flash.is-lit {
+  opacity: 1;
+  transition: none;
+}
+
+/* Josh's Maths App ------------------------------------------------------ */
+
+.maths-pane {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--face);
+  outline: none;
+}
+
+/* The conversation, oldest at the top. */
+.maths-log {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  background: #fff;
+  border: 2px solid;
+  border-color: var(--face-dark) #fff #fff var(--face-dark);
+  margin: 3px;
+}
+
+/* Bevelled boxes rather than round bubbles — this desktop has never seen a round bubble. */
+.maths-line {
+  margin: 0;
+  max-width: 85%;
+  padding: 5px 9px;
+  font-size: 13px;
+  line-height: 1.35;
+  color: #000;
+  background: var(--face);
+  border: 2px solid;
+  border-color: var(--face-light) var(--face-darker) var(--face-darker) var(--face-light);
+  box-shadow: inset 1px 1px 0 #fff, inset -1px -1px 0 var(--face-dark);
+}
+
+/* The sums you asked, over on your side. */
+.maths-line.is-you {
+  align-self: flex-end;
+  background: #000080;
+  color: #fff;
+  border-color: #3a3ab0 #000040 #000040 #3a3ab0;
+  box-shadow: inset 1px 1px 0 #4a4ac8, inset -1px -1px 0 #000030;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Three dots, taking their time. */
+.maths-dots {
+  display: flex;
+  gap: 4px;
+  padding: 9px;
+}
+
+.maths-dots span {
+  width: 6px;
+  height: 6px;
+  background: var(--face-darker);
+  animation: maths-bob 1.1s infinite ease-in-out;
+}
+
+.maths-dots span:nth-child(2) {
+  animation-delay: 0.16s;
+}
+
+.maths-dots span:nth-child(3) {
+  animation-delay: 0.32s;
+}
+
+@keyframes maths-bob {
+  0%,
+  70%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.45;
+  }
+  35% {
+    transform: translateY(-5px);
+    opacity: 1;
+  }
+}
+
+/* The sum as it's being built, in the well above the keys. */
+.maths-sum {
+  flex: none;
+  margin: 3px 3px 0;
+  padding: 7px 9px;
+  min-height: 34px;
+  text-align: right;
+  font-size: 16px;
+  font-variant-numeric: tabular-nums;
+  color: #000;
+  background: #fff;
+  border: 2px solid;
+  border-color: var(--face-dark) #fff #fff var(--face-dark);
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.maths-empty {
+  color: var(--face-dark);
+  font-size: 13px;
+}
+
+.maths-keys {
+  flex: none;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  padding: 6px;
+}
+
+.maths-keys .chrome-button {
+  height: 36px;
+  justify-content: center;
+  font-size: 15px;
+}
+
+.maths-keys .chrome-button.is-equals {
+  font-weight: 700;
+  color: #000080;
+}
+
+.maths-keys .chrome-button[aria-disabled='true'] {
+  color: var(--face-dark);
+  text-shadow: 1px 1px 0 #fff;
+  cursor: default;
 }
