@@ -1,6 +1,6 @@
 import { For, Show } from 'solid-js';
-import { BIN_GLYPH, binName, glyphFor, type Panes } from './shell';
-import { resolve, artwork } from './toys';
+import { BIN_GLYPH, binName, glyphFor, type Panes } from '../os/shell';
+import { resolve, artwork } from '../os/toys';
 
 type Props = {
   depth: number;

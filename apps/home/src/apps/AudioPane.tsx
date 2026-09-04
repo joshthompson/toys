@@ -1,8 +1,8 @@
 import { createSignal, onCleanup, onMount, Show } from 'solid-js';
-import { downloadFile, formatBytes } from './files';
-import { createTransport, MediaBar } from './media';
-import type { Menu } from './osApi';
-import { AUDIO_APP, type Panes } from './shell';
+import { downloadFile, formatBytes } from '../os/files';
+import { createTransport, MediaBar } from '../shared/media';
+import type { Menu } from '../os/osApi';
+import { AUDIO_APP, type Panes } from '../os/shell';
 
 type Props = {
   fileId: string;

@@ -69,6 +69,15 @@ export const newFileId = () =>
 
 export const isFileId = (key: string) => key.startsWith('file:');
 
+/**
+ * Folders are ids like files are, and deliberately not files: nothing is stored for
+ * one but its name and where it sits, so they never go near IndexedDB.
+ */
+export const newFolderId = () =>
+  `folder:${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+
+export const isFolderId = (key: string) => key.startsWith('folder:');
+
 /** Everything the desktop needs off a stored file to draw and open it. */
 export const hydrate = (file: StoredFile): DesktopFile => ({
   ...file,

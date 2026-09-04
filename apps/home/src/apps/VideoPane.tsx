@@ -1,8 +1,8 @@
 import { createSignal, onCleanup, onMount, Show } from 'solid-js';
-import { downloadFile, formatBytes } from './files';
-import { createTransport, MediaBar } from './media';
-import type { Menu } from './osApi';
-import { TASKBAR_HEIGHT, VIDEO_APP, type Panes } from './shell';
+import { downloadFile, formatBytes } from '../os/files';
+import { createTransport, MediaBar } from '../shared/media';
+import type { Menu } from '../os/osApi';
+import { TASKBAR_HEIGHT, VIDEO_APP, type Panes } from '../os/shell';
 
 type Props = {
   fileId: string;
@@ -89,6 +89,7 @@ export function VideoPane(props: Props) {
     <div
       class="video-pane"
       tabindex={0}
+      autofocus
       onKeyDown={(e) => {
         if (e.key === ' ') transport.toggle();
         else if (e.key === 'ArrowRight') transport.seek(transport.time() + 5);

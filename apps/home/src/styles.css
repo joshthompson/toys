@@ -122,7 +122,10 @@ body {
 
 .icon.is-dragging {
   opacity: 0.7;
-  z-index: 1;
+  /* Over the windows as well as over the desktop: an icon being carried from one to
+     the other has to be visible the whole way across, or it is a thing you are moving
+     on faith. The number is above every window, which is what it has to clear. */
+  z-index: 100000;
 }
 
 .icon[aria-disabled='true'] {
@@ -201,10 +204,28 @@ body {
   filter: drop-shadow(1px 1px 1px rgb(0 0 0 / 0.5));
 }
 
-/* Highlight the bin while an icon is dragged over it. */
-.icon.is-bin.is-drop-target .icon-art {
+/* Highlight whatever an icon is being dragged over — the bin, or a folder. */
+.icon.is-drop-target .icon-art {
   outline: 2px dotted #fff;
   outline-offset: 2px;
+}
+
+.icon.is-drop-target .icon-label {
+  background: #000080;
+  color: #fff;
+}
+
+/* The corner stamp on an icon that is a picture of itself: the glyph the file would
+   otherwise have had, shrunk into the bottom-right of the frame. The shadow is what
+   keeps it readable over a photograph that happens to be the same colour as it. */
+.icon-stamp {
+  position: absolute;
+  right: 1px;
+  bottom: 1px;
+  font-size: calc(var(--icon-art) * 0.34);
+  line-height: 1;
+  filter: drop-shadow(0 0 2px #000) drop-shadow(0 1px 1px rgb(0 0 0 / 0.8));
+  pointer-events: none;
 }
 
 .icon-count {
@@ -943,6 +964,17 @@ body {
   opacity: 0.7;
 }
 
+/* What a group of Start menu items is. Not a menu item itself — you can't click it,
+   and nothing on this desktop is worse than a heading that looks pressable. */
+.start-heading {
+  padding: 6px 10px 2px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #404040;
+}
+
 .start-separator {
   height: 0;
   margin: 3px 6px;
@@ -1332,6 +1364,29 @@ body {
   white-space: nowrap;
 }
 
+/* The one question this app asks, across the foot of the page it is about. */
+.writing-ask {
+  flex: none;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 7px 8px;
+  font-size: 12px;
+  background: #fdf3c8;
+  border-top: 2px solid;
+  border-color: #8a7a30;
+}
+
+.writing-ask span {
+  flex: 1;
+  min-width: 140px;
+}
+
+
+
+
 .writing-status {
   flex: none;
   color: #404040;
@@ -1549,7 +1604,8 @@ body {
 
 /* The size is set in the pane, which measures the window and works out the largest
    whole picture that fits. `pixelated` is the point of the app in one line: every one
-   of those 200 by 150 pixels is drawn as a square. */
+   of those 200 by 150 pixels is drawn as a square. The pane overrides it for the one
+   case it is wrong in — a picture too big for the window, which has to be shrunk. */
 .camera-stage canvas {
   image-rendering: pixelated;
   background: #000;
@@ -1894,4 +1950,689 @@ body {
   color: var(--face-dark);
   text-shadow: 1px 1px 0 #fff;
   cursor: default;
+}
+
+/* The nudge ---------------------------------------------------------------- */
+
+/* Straight off MSN Messenger: a window with something to say that you haven't
+   noticed shakes on the spot until you do. Side to side only — a window that also
+   hops vertically reads as a fault rather than as somebody waving. Transform only,
+   so it never disturbs the left/top the window is positioned by, and it lands back
+   exactly where it started. */
+@keyframes window-nudge {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  15% {
+    transform: translateX(-8px);
+  }
+  30% {
+    transform: translateX(8px);
+  }
+  45% {
+    transform: translateX(-6px);
+  }
+  60% {
+    transform: translateX(6px);
+  }
+  75% {
+    transform: translateX(-3px);
+  }
+  90% {
+    transform: translateX(3px);
+  }
+}
+
+.window.is-nudging {
+  animation: window-nudge 0.35s ease-in-out;
+}
+
+/* Shaking the screen at somebody who has asked for less movement is exactly the
+   wrong way round. The window still comes to the front, which was the point. */
+@media (prefers-reduced-motion: reduce) {
+  .window.is-nudging {
+    animation: none;
+  }
+}
+
+/* The other calculator ----------------------------------------------------- */
+
+/* Red, so that the two of them can be told apart across a desktop at a glance —
+   but only while it's the window you're in. Out of focus it goes the same grey as
+   every other window out of focus does, since which window has your attention is
+   the one thing the title bar is really there to say, and a red bar in the
+   background reads as a window still shouting after you have looked away. */
+.window.is-rival.is-active .title-bar {
+  background: linear-gradient(90deg, #8b0000, #d05050);
+}
+
+.maths-pane.is-rival .maths-line.is-you {
+  background: #6b0f0f;
+  border-color: #b03a3a #400000 #400000 #b03a3a;
+  box-shadow: inset 1px 1px 0 #c84a4a, inset -1px -1px 0 #300000;
+}
+
+.maths-pane.is-rival .maths-keys .chrome-button.is-equals {
+  background: #8b0000;
+  color: #fff;
+}
+
+/* What it is answering, above what it has to say about it — the same shape every
+   chat window uses for a reply, because it is the same idea. */
+.maths-quote {
+  display: block;
+  margin-bottom: 6px;
+  padding: 3px 0 3px 7px;
+  border-left: 3px solid var(--face-dark);
+  font-size: 12px;
+  line-height: 1.35;
+  color: #303030;
+}
+
+.maths-quote-who {
+  display: block;
+  font-weight: 700;
+  font-size: 11px;
+  color: #505050;
+}
+
+/* On the red one's own bubbles the quote sits on a dark ground, so it swaps to the
+   light end of the same idea rather than staying nearly invisible. */
+.maths-line.is-you .maths-quote {
+  border-left-color: rgba(255, 255, 255, 0.5);
+  color: #e8e8e8;
+}
+
+.maths-line.is-you .maths-quote-who {
+  color: #c8c8d8;
+}
+
+/* Its working -------------------------------------------------------------- */
+
+/* Set apart from what it says, and in the one font on this computer that lines
+   figures up under each other. */
+.maths-working {
+  display: block;
+  margin-top: 6px;
+  padding-top: 5px;
+  border-top: 1px dotted var(--face-dark);
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+
+.maths-working span {
+  display: block;
+  white-space: pre-wrap;
+}
+
+/* Pay or don't, under the price it has just quoted. */
+.maths-offer {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.maths-offer .chrome-button {
+  font-size: 12px;
+  padding: 3px 12px;
+}
+
+/* Run ---------------------------------------------------------------------- */
+
+.run-pane {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  background: var(--face);
+  outline: none;
+}
+
+.run-blurb {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.run-art {
+  font-size: 26px;
+  line-height: 1;
+}
+
+.run-blurb p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+/* Label beside the field rather than above it, as it was. */
+.run-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.run-field input {
+  flex: 1;
+  min-width: 0;
+  padding: 3px 5px;
+  font: inherit;
+  font-size: 13px;
+  background: #fff;
+  border: 2px solid;
+  border-color: var(--face-dark) #fff #fff var(--face-dark);
+}
+
+/* Buttons hard right, the way every dialog on this computer ends. */
+.run-bar {
+  margin-top: auto;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.run-bar .chrome-button {
+  min-width: 76px;
+}
+
+/* Josh's Bank -------------------------------------------------------------- */
+
+.bank-pane {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--face);
+  outline: none;
+}
+
+/* An app asking for money, above everything else because nothing moves until it
+   is answered. Yellow, the way every bank marks the thing it needs from you. */
+.bank-ask {
+  flex: none;
+  margin: 0 3px 3px;
+  padding: 9px 11px;
+  background: #fdf3c8;
+  border: 2px solid;
+  border-color: #fff8e0 #8a7a30 #8a7a30 #fff8e0;
+}
+
+.bank-ask-head {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.bank-ask-what {
+  margin: 5px 0 0;
+  font-size: 13px;
+}
+
+/* What the app says the money is for, under the name of the app saying it. */
+.bank-ask-for {
+  display: block;
+  font-size: 12px;
+  color: #4a4420;
+}
+
+.bank-ask-amount {
+  margin: 3px 0 0;
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Why the Approve button is going to do nothing, in the red the account would be
+   in if it did. */
+.bank-ask-short {
+  margin: 6px 0 0;
+  font-size: 12px;
+  line-height: 1.35;
+  color: #8a2020;
+}
+
+.bank-ask-buttons {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0 0;
+}
+
+.bank-ask-buttons .chrome-button[aria-disabled='true'] {
+  color: var(--face-dark);
+  text-shadow: 1px 1px 0 #fff;
+  cursor: default;
+}
+
+/* The card at the top of every banking app there has ever been. */
+.bank-header {
+  flex: none;
+  margin: 3px;
+  padding: 10px 12px;
+  color: #fff;
+  background: linear-gradient(160deg, #0b4f3a, #12796a);
+  border: 2px solid;
+  border-color: #3aa88f #04301f #04301f #3aa88f;
+}
+
+.bank-account {
+  margin: 0;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+
+.bank-number {
+  margin: 2px 0 0;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+.bank-balance {
+  margin: 8px 0 0;
+  font-size: 30px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Overdrawn is red here as it is everywhere else. */
+.bank-balance.is-short {
+  color: #ffb0b0;
+}
+
+.bank-since {
+  margin: 2px 0 0;
+  font-size: 11px;
+  opacity: 0.8;
+}
+
+.bank-log {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0 3px 3px;
+  padding: 4px;
+  background: #fff;
+  border: 2px solid;
+  border-color: var(--face-dark) #fff #fff var(--face-dark);
+}
+
+.bank-empty {
+  margin: 0;
+  padding: 14px 10px;
+  font-size: 13px;
+  color: #404040;
+  text-align: center;
+}
+
+/* Description on the left, when it happened under it, amount hard right. */
+.bank-entry {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0 8px;
+  margin: 0;
+  padding: 7px 8px;
+  border-bottom: 1px solid #e0e0e0;
+  font-size: 13px;
+}
+
+.bank-entry:last-child {
+  border-bottom: 0;
+}
+
+.bank-what {
+  grid-column: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bank-when {
+  grid-column: 1;
+  font-size: 11px;
+  color: #606060;
+}
+
+.bank-amount {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #0b6b3a;
+}
+
+.bank-amount.is-out {
+  color: #a01010;
+}
+
+.bank-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  border-top: 1px solid var(--face-light);
+}
+
+.bank-note {
+  font-size: 11px;
+  color: #404040;
+}
+
+/* Folders ------------------------------------------------------------------ */
+
+.folder-pane {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--face);
+  outline: none;
+}
+
+.folder-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px;
+  font-size: 12px;
+  border-bottom: 1px solid var(--face-dark);
+}
+
+.folder-where {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 700;
+}
+
+.folder-count {
+  flex: none;
+  color: #404040;
+}
+
+/* The floor of a folder, which is a small desktop: icons stand where they were put,
+   and the whole area takes a drop. */
+.folder-items {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0;
+  margin: 3px;
+  background: #fff;
+  border: 2px solid;
+  border-color: var(--face-dark) #fff #fff var(--face-dark);
+}
+
+/* Something is being dragged over it and would land in here if let go. */
+.folder-items.is-catching {
+  outline: 2px dotted #000080;
+  outline-offset: -4px;
+  background: #f0f0ff;
+}
+
+/* A rubber band on white paper rather than on a desktop: the same band, inked the
+   other way about so it can be seen. */
+.marquee.is-dark {
+  background: rgb(0 0 128 / 0.12);
+  border-color: #000080;
+}
+
+/* Where the window is, along the bottom. */
+.folder-path {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  font-size: 11px;
+  color: #303030;
+  border-top: 1px solid var(--face-light);
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.folder-root {
+  flex: none;
+  color: #505050;
+}
+
+.folder-sep {
+  flex: none;
+  color: #808080;
+}
+
+.folder-step {
+  flex: none;
+  appearance: none;
+  padding: 1px 4px;
+  background: none;
+  border: 1px solid transparent;
+  font: inherit;
+  font-size: 11px;
+  color: #000080;
+  /* A hand, because a click on it goes somewhere. Mid-drag the pointer belongs to the
+     icon being carried, which keeps its own cursor the whole way, so this is only ever
+     what an empty hand sees. */
+  cursor: pointer;
+}
+
+/* Underlined when the pointer is on it, whether or not it is carrying anything —
+   the same mark for 'this is where that click goes' and 'this is where that drops'. */
+.folder-step:hover {
+  text-decoration: underline;
+}
+
+.folder-root.is-catching,
+.folder-step.is-catching {
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  background: #fff;
+  border-color: var(--face-dark);
+  color: #000080;
+}
+
+/* The end of the path is where you already are — nowhere to click to, though it still
+   takes a drop like the rest of them. */
+.folder-step.is-here {
+  font-weight: 700;
+  color: #000;
+  cursor: default;
+}
+
+/* Icons in a folder stand on white rather than on a photograph, so the label that
+   is legible out on the desktop would be invisible in here. */
+.folder-items .icon {
+  color: #000;
+}
+
+.folder-items .icon .icon-label {
+  text-shadow: none;
+}
+
+.folder-items .icon.is-selected .icon-label {
+  background: #000080;
+  color: #fff;
+}
+
+.folder-empty {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 20px;
+  text-align: center;
+  font-size: 13px;
+  color: #404040;
+  /* Right-clicking the message is right-clicking the folder behind it. */
+  pointer-events: none;
+}
+
+.folder-empty small {
+  color: #707070;
+}
+
+/* The Open dialog --------------------------------------------------------- */
+
+.picker-pane {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--face);
+  outline: none;
+}
+
+.picker-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  font-size: 12px;
+}
+
+.picker-label {
+  flex: none;
+  color: #303030;
+}
+
+.picker-where {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 3px 6px;
+  background: #fff;
+  border: 2px solid;
+  border-color: var(--face-dark) #fff #fff var(--face-dark);
+}
+
+.picker-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0 8px;
+  background: #fff;
+  border: 2px solid;
+  border-color: var(--face-dark) #fff #fff var(--face-dark);
+}
+
+.picker-empty {
+  margin: 0;
+  padding: 16px;
+  text-align: center;
+  font-size: 13px;
+  color: #505050;
+}
+
+.picker-row {
+  appearance: none;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  background: none;
+  border: 0;
+  font: inherit;
+  font-size: 13px;
+  color: #000;
+  cursor: default;
+  text-align: left;
+}
+
+.picker-row:hover {
+  background: #e8e8f8;
+}
+
+/* The one that Open would open. */
+.picker-row.is-chosen {
+  background: #000080;
+  color: #fff;
+}
+
+.picker-art {
+  flex: none;
+  font-size: 16px;
+}
+
+.picker-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.picker-size {
+  flex: none;
+  font-size: 11px;
+  color: #606060;
+}
+
+.picker-row.is-chosen .picker-size {
+  color: #c8c8e8;
+}
+
+/* Saving: the name it will be given. */
+.picker-field {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 8px 0;
+  font-size: 12px;
+}
+
+.picker-field input {
+  flex: 1;
+  min-width: 0;
+  padding: 3px 5px;
+  font: inherit;
+  font-size: 13px;
+  background: #fff;
+  border: 2px solid;
+  border-color: var(--face-dark) #fff #fff var(--face-dark);
+}
+
+.picker-clash {
+  color: #a01010;
+}
+
+.picker-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+}
+
+.picker-asked {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  color: #404040;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.picker-actions .chrome-button {
+  min-width: 76px;
 }

@@ -1,16 +1,29 @@
-import { createSignal, For, Match, onCleanup, onMount, Show, Switch } from 'solid-js';
+import {
+  createEffect,
+  createSignal,
+  For,
+  Match,
+  onCleanup,
+  onMount,
+  Show,
+  Switch,
+} from 'solid-js';
 import { TASKBAR_HEIGHT, type Panes, type WindowState } from './shell';
-import { BinPane } from './BinPane';
-import { SettingsPane } from './SettingsPane';
-import { AboutPane } from './AboutPane';
-import { MathsPane } from './MathsPane';
-import { CameraPane } from './CameraPane';
-import { PicturePane } from './PicturePane';
-import { WritingPane } from './WritingPane';
-import { AudioPane } from './AudioPane';
-import { VideoPane } from './VideoPane';
-import { NoticePane } from './NoticePane';
-import { TextPane } from './TextPane';
+import { BinPane } from '../apps/BinPane';
+import { SettingsPane } from '../apps/SettingsPane';
+import { AboutPane } from '../apps/AboutPane';
+import { MathsPane } from '../apps/MathsPane';
+import { BankPane } from '../apps/BankPane';
+import { RunPane } from '../apps/RunPane';
+import { FolderPane } from '../apps/FolderPane';
+import { PickerPane } from '../apps/PickerPane';
+import { CameraPane } from '../apps/CameraPane';
+import { PicturePane } from '../apps/PicturePane';
+import { WritingPane } from '../apps/WritingPane';
+import { AudioPane } from '../apps/AudioPane';
+import { VideoPane } from '../apps/VideoPane';
+import { NoticePane } from '../apps/NoticePane';
+import { TextPane } from '../apps/TextPane';
 import { MenuBar } from './MenuBar';
 import { envelope, parseFromApp, type FromOs, type Menu, type MenuItem } from './osApi';
 import { embedUrl, resolve } from './toys';
@@ -27,7 +40,12 @@ type Props = {
   onResize: (x: number, y: number, w: number, h: number) => void;
   /** For the picture viewer, whose window is named after whichever picture it's on. */
   onRetitle: (title: string) => void;
+  /** A folder window that has been navigated somewhere else, so the OS knows where. */
+  onShowFolder: (folderId: string) => void;
 };
+
+/** How long the shake runs for. Kept in step with the keyframes in styles.css. */
+const NUDGE_MS = 350;
 
 export const MIN_W = 240;
 export const MIN_H = 160;
@@ -56,15 +74,23 @@ export function ToyWindow(props: Props) {
   // `interacting` covers both drag and resize: while either is live the iframe must
   // not swallow pointer events.
   const [interacting, setInteracting] = createSignal(false);
+  const [nudging, setNudging] = createSignal(false);
+  let shake: ReturnType<typeof setTimeout> | undefined;
+  onCleanup(() => clearTimeout(shake));
   let gesture: Gesture | null = null;
 
   const toy = () => (props.win.content.type === 'toy' ? props.win.content.toy : null);
   const binDepth = () =>
     props.win.content.type === 'bin' ? { depth: props.win.content.depth } : null;
   /** The file a picture, writing or media window is looking at. */
-  const fileWindow = (type: 'picture' | 'writing' | 'audio' | 'video') =>
+  // Writing is not in here: it is the one file window whose file can be missing, so
+  // naming it alongside these would make every file id in the union optional.
+  const fileWindow = (type: 'picture' | 'audio' | 'video') =>
     props.win.content.type === type ? { id: props.win.content.fileId } : null;
   const notice = () => (props.win.content.type === 'notice' ? props.win.content.body : null);
+  /** Wrapped because the flag is false for the ordinary calculator, which is not nothing. */
+  const maths = () =>
+    props.win.content.type === 'maths' ? { rival: props.win.content.rival === true } : null;
   const text = () => (props.win.content.type === 'text' ? props.win.content.body : null);
   const src = () => {
     const t = toy();
@@ -141,6 +167,60 @@ export function ToyWindow(props: Props) {
       frame?.focus();
     }
   };
+
+  /**
+   * The old messenger nudge: the window comes to the front, takes the keyboard, and
+   * shakes on the spot.
+   *
+   * An app inside a window has no way to raise its own window and no business knowing
+   * how — it can only say that something has happened in here worth looking at, which
+   * is what this is. Everything after that is the window's own doing.
+   */
+  const nudge = () => {
+    props.onFocus();
+    // A frame with the class off first, or an animation already running simply carries
+    // on from where it was — which is no nudge at all when one arrives on top of another.
+    setNudging(false);
+    clearTimeout(shake);
+    requestAnimationFrame(() => {
+      setNudging(true);
+      shake = setTimeout(() => setNudging(false), NUDGE_MS);
+    });
+  };
+
+  /**
+   * Where the keyboard goes when this window opens, or comes back to the front.
+   *
+   * A pane that wants the keys says so with `autofocus` on the very element listening
+   * for them: a keypress lands on whatever is focused and travels up from there, so
+   * focusing the window around a pane would leave the pane hearing nothing at all. A
+   * framed toy gets the frame, and a window with nothing to focus gets its own body,
+   * which is enough for the desktop's own shortcuts to go on working.
+   */
+  const takeKeys = () => {
+    if (!body) return;
+    // Something in here has it already — whatever the pointer landed on has the better
+    // claim, and this window is not going to argue with the click that raised it.
+    if (body.contains(document.activeElement)) return;
+    (body.querySelector<HTMLElement>('[autofocus]') ?? frame ?? body).focus({
+      preventScroll: true,
+    });
+  };
+
+  /**
+   * Coming to the front is the moment the keyboard changes hands, which covers opening,
+   * being clicked on, and coming back off the taskbar alike.
+   *
+   * A frame later, so that the click doing the raising has had its say first: the
+   * browser moves focus on the way out of a pointerdown, after this has already run,
+   * and a window that grabbed the keyboard on the way in would only have it taken off
+   * it again by the same click.
+   */
+  createEffect(() => {
+    if (!props.active) return;
+    const soon = requestAnimationFrame(takeKeys);
+    onCleanup(() => cancelAnimationFrame(soon));
+  });
 
   // The app's side of the conversation. Matching the source window is what makes this
   // safe: every window on the desktop hears every message, and only the one that framed
@@ -285,7 +365,13 @@ export function ToyWindow(props: Props) {
   return (
     <section
       class="window"
-      classList={{ 'is-active': props.active, 'is-maximized': props.win.maximized }}
+      classList={{
+        'is-active': props.active,
+        'is-maximized': props.win.maximized,
+        // The red one, which the whole window wears rather than only its pane.
+        'is-rival': maths()?.rival === true,
+        'is-nudging': nudging(),
+      }}
       style={{
         'z-index': props.win.z,
         display: props.win.minimized ? 'none' : undefined,
@@ -339,7 +425,13 @@ export function ToyWindow(props: Props) {
         <MenuBar menus={menus()} onSelect={onMenuPick} />
       </Show>
 
-      <div class="window-body" ref={body} classList={{ 'is-interacting': interacting() }}>
+      {/* -1 so the window can be handed the keys without joining the tab order. */}
+      <div
+        class="window-body"
+        ref={body}
+        tabindex={-1}
+        classList={{ 'is-interacting': interacting() }}
+      >
         <Switch>
           <Match when={props.win.content.type === 'toy'}>
             <iframe ref={frame} src={src()} title={props.win.title} />
@@ -357,8 +449,28 @@ export function ToyWindow(props: Props) {
           <Match when={props.win.content.type === 'camera'}>
             <CameraPane panes={props.panes} />
           </Match>
-          <Match when={props.win.content.type === 'maths'}>
-            <MathsPane />
+          {/* Wrapped, so the red one and the ordinary one are told apart. */}
+          <Match when={maths()}>
+            {(app) => <MathsPane panes={props.panes} rival={app().rival} nudge={nudge} />}
+          </Match>
+          <Match when={props.win.content.type === 'bank'}>
+            <BankPane panes={props.panes} />
+          </Match>
+          <Match when={props.win.content.type === 'run'}>
+            <RunPane panes={props.panes} onClose={props.onClose} />
+          </Match>
+          <Match when={props.win.content.type === 'folder' && props.win.content}>
+            {(folder) => (
+              <FolderPane
+                folderId={folder().folderId}
+                panes={props.panes}
+                onTitle={props.onRetitle}
+                onShow={props.onShowFolder}
+              />
+            )}
+          </Match>
+          <Match when={props.win.content.type === 'picker'}>
+            <PickerPane panes={props.panes} />
           </Match>
           {/* Wrapped for the same reason as the bin: the payload has to be truthy. */}
           <Match when={fileWindow('picture')}>
@@ -371,8 +483,16 @@ export function ToyWindow(props: Props) {
               />
             )}
           </Match>
-          <Match when={fileWindow('writing')}>
-            {(file) => <WritingPane fileId={file().id} panes={props.panes} />}
+          {/* Not fileWindow: this is the one file window that can have no file. */}
+          <Match when={props.win.content.type === 'writing' && props.win.content}>
+            {(doc) => (
+              <WritingPane
+                fileId={doc().fileId}
+                panes={props.panes}
+                onTitle={props.onRetitle}
+                onMenus={(menus, select) => setPaneMenus({ menus, select })}
+              />
+            )}
           </Match>
           <Match when={fileWindow('audio')}>
             {(file) => (

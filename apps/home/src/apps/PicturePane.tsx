@@ -1,7 +1,7 @@
 import { createSignal, onCleanup, onMount, Show } from 'solid-js';
-import { downloadFile, formatBytes } from './files';
-import type { Menu } from './osApi';
-import { IMAGE_APP, type Panes } from './shell';
+import { downloadFile, formatBytes } from '../os/files';
+import type { Menu } from '../os/osApi';
+import { IMAGE_APP, type Panes } from '../os/shell';
 
 type Props = {
   /** The picture that was opened. Where the viewer goes from there is its own business. */
@@ -20,6 +20,9 @@ const SCROLL_STEP = 64;
 
 /** The stops the zoom buttons walk. Whole steps, the way a 1995 viewer zoomed. */
 const STOPS = [0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8];
+
+/** How long the bar says what just happened before going back to saying what this is. */
+const NOTE_MS = 2400;
 
 /**
  * Josh's Image Looking App — one dropped image, and a way through the rest.
@@ -44,9 +47,20 @@ export function PicturePane(props: Props) {
   const [box, setBox] = createSignal({ w: 0, h: 0 });
   /** True while the picture is being dragged about, for the cursor's sake. */
   const [panning, setPanning] = createSignal(false);
+  /** A word in the bar about something that has just been done with the picture. */
+  const [note, setNote] = createSignal<string | null>(null);
   let frame!: HTMLDivElement;
   let stage!: HTMLDivElement;
+  /** The picture as the window is showing it, which is also what gets copied out. */
+  let shown: HTMLImageElement | null = null;
+  let noteTimer: ReturnType<typeof setTimeout> | undefined;
 
+  const say = (what: string) => {
+    setNote(what);
+    clearTimeout(noteTimer);
+    noteTimer = setTimeout(() => setNote(null), NOTE_MS);
+  };
+  onCleanup(() => clearTimeout(noteTimer));
 
   const pictures = () => props.panes.filesOfKind('image');
   /**
@@ -140,6 +154,72 @@ export function PicturePane(props: Props) {
   /** Already tiled across the desktop, so there's nothing to do to it again. */
   const isWallpaper = () => props.panes.wallpaper()?.id === id();
 
+  /** Whether this browser has the clipboard call that takes a picture rather than text. */
+  const canCopy = () => typeof ClipboardItem !== 'undefined' && !!navigator.clipboard?.write;
+
+  /**
+   * The picture on screen, encoded as a PNG.
+   *
+   * Taken off the <img> the window is already showing rather than by decoding the file
+   * a second time — which is quicker, and also means anything the browser can display
+   * can be copied out, whatever the clipboard would have made of the original bytes.
+   */
+  const pngOfShown = async () => {
+    const img = shown;
+    if (!img?.naturalWidth) throw new Error('this picture has not decoded yet');
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('this browser has no canvas to redraw it through');
+    ctx.drawImage(img, 0, 0);
+    const png = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+    if (!png) throw new Error('the canvas would not give up a PNG');
+    return png;
+  };
+
+  /**
+   * Put the picture on the real computer's clipboard, for pasting into something that
+   * has nothing to do with this one.
+   *
+   * PNG is the only format the clipboard is obliged to take, so anything else goes
+   * through the canvas above and arrives as a PNG of the same picture — which is what
+   * every other viewer does about this too. A PNG goes as it is: decoding and encoding
+   * a lossless format to arrive back where it started would be work for nothing.
+   */
+  const copyPicture = async () => {
+    const file = current();
+    if (!file) return;
+    try {
+      // Handed over as a promise rather than awaited first, because Safari counts the
+      // write against the click that asked for it and an await in between loses it.
+      const png = file.type === 'image/png' ? Promise.resolve(file.blob) : pngOfShown();
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
+      say('Copied to the clipboard');
+    } catch {
+      // Every one of these is the browser's refusal rather than the picture's fault:
+      // a window that isn't focused, a clipboard the page isn't allowed, a format the
+      // canvas wouldn't take. There is nothing to do about any of them but say so.
+      say("The browser wouldn't put this on the clipboard");
+    }
+  };
+
+  /** What right-clicking the picture offers, which is what anyone right-clicks one for. */
+  const pictureMenu = (x: number, y: number) => {
+    const file = current();
+    if (!file) return;
+    props.panes.menu(x, y, [
+      { label: 'Copy Picture', disabled: !canCopy(), onSelect: () => void copyPicture() },
+      { label: 'Save Picture to My Computer', onSelect: () => downloadFile(file) },
+      { separator: true },
+      {
+        label: 'Make Desktop Background',
+        disabled: isWallpaper(),
+        onSelect: () => props.panes.setWallpaper(file.id),
+      },
+    ]);
+  };
+
   /**
    * The menu bar, which offers what the bar along the bottom offers. Everything is in
    * both places on purpose: the buttons are quicker, and the menu is where you look
@@ -155,6 +235,13 @@ export function PicturePane(props: Props) {
           label: 'Make Desktop Background',
           disabled: !current() || isWallpaper(),
         },
+      ],
+    },
+    {
+      // Where a picture viewer of the period kept its one and only edit.
+      label: 'Edit',
+      items: [
+        { id: 'copy', label: 'Copy Picture', disabled: !current() || !canCopy() },
       ],
     },
     {
@@ -177,6 +264,7 @@ export function PicturePane(props: Props) {
       const file = current();
       if (file) downloadFile(file);
     }
+    else if (pick === 'copy') void copyPicture();
     else if (pick === 'wallpaper' && current()) props.panes.setWallpaper(id());
     else if (pick === 'prev') step(-1);
     else if (pick === 'next') step(1);
@@ -209,6 +297,7 @@ export function PicturePane(props: Props) {
       class="picture-pane"
       ref={frame}
       tabindex={0}
+      autofocus
       onKeyDown={(e) => {
         // Left and right are the pictures either side; up and down move about the one
         // on screen. The stage is a child of the focused pane, so the browser would
@@ -240,6 +329,13 @@ export function PicturePane(props: Props) {
         onPointerMove={pan}
         onPointerUp={endPan}
         onPointerCancel={endPan}
+        onContextMenu={(e) => {
+          // The desktop behind this window would otherwise put up its own menu, and
+          // right-clicking a picture is where anyone looks for copying and saving it.
+          e.preventDefault();
+          e.stopPropagation();
+          pictureMenu(e.clientX, e.clientY);
+        }}
         onWheel={(e) => {
           // Plain wheel scrolls the picture; held down, it zooms, as viewers do.
           if (!e.ctrlKey && !e.metaKey) return;
@@ -253,6 +349,7 @@ export function PicturePane(props: Props) {
         >
           {(file) => (
             <img
+              ref={(el) => (shown = el)}
               src={file().url}
               alt={file().name}
               draggable={false}
@@ -328,6 +425,8 @@ export function PicturePane(props: Props) {
         </span>
 
         <span class="picture-status">
+          {/* Whatever has just been done with the picture, in front of what it is. */}
+          <Show when={note()}>{(what) => <>{what()} — </>}</Show>
           <Show when={current()} fallback="Gone">
             {(file) => (
               <>

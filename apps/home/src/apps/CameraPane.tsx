@@ -1,5 +1,5 @@
 import { createEffect, createSignal, For, Match, onCleanup, onMount, Show, Switch } from 'solid-js';
-import type { Panes } from './shell';
+import type { Panes } from '../os/shell';
 
 /**
  * Josh's Camera App — the room in front of you, at a resolution this computer believes in.
@@ -8,14 +8,12 @@ import type { Panes } from './shell';
  * to 256 colours, and then blown back up with every one of those pixels drawn as a square.
  * Nothing here is a filter over a real picture: the picture really is this small, and the
  * screen is only showing it at a size you can see.
+ *
+ * How small is the one thing in the bar that isn't a choice about the picture so much as
+ * a choice about the computer: the grid is the default and the point of it, but the same
+ * room through the same filters at four times the grid, or at everything the camera has,
+ * is a different picture rather than a bigger one.
  */
-
-/**
- * How much bigger a saved photo is than the grid it was taken on. The blocks are drawn
- * hard, so this adds no detail — it only stops every picture viewer in the world from
- * smoothing a 200x150 thumbnail into a blur while trying to be helpful.
- */
-const SAVE_SCALE = 4;
 
 /**
  * The flash is the screen itself: white it out and it lights whatever is in front of
@@ -84,6 +82,41 @@ const WIDE = { w: 200, h: 150 };
 const TALL = { w: 150, h: 200 };
 
 /**
+ * How many grids across the picture is made.
+ *
+ * Everything downstream is worked out from the grid that comes back rather than assumed
+ * to be 200 across — how finely the bulge gets to bend the picture, how far a saved
+ * photograph is blown up on the way out — so that the multiples cost only what they
+ * actually are. What they do cost is arithmetic: every filter here walks every pixel it
+ * is handed, and Original hands it a megapixel sixty times a second.
+ */
+const PIXELS = [
+  { id: 'grid', name: 'Standard', grids: 1 },
+  { id: 'double', name: '2x', grids: 2 },
+  { id: 'quad', name: '4x', grids: 4 },
+  // No multiple of the grid at all: what the camera has, cropped to the grid's shape.
+  { id: 'original', name: 'Original', grids: 0 },
+] as const;
+
+type Pixels = (typeof PIXELS)[number]['id'];
+
+/**
+ * How much bigger a saved photo is than the grid it was taken on. The blocks are drawn
+ * hard, so this adds no detail — it only stops every picture viewer in the world from
+ * smoothing a 200x150 thumbnail into a blur while trying to be helpful.
+ */
+const SAVE_SCALE = 4;
+
+/**
+ * That blow-up, for the grid actually in use: enough to carry a 200x150 picture past
+ * the smoothing and no more, so that a photograph leaves this app about eight hundred
+ * pixels across whichever resolution it was taken at. A picture that is already that
+ * big is saved at its own size, there being nothing left to protect it from.
+ */
+const saveScale = (across: number) =>
+  Math.max(1, Math.min(SAVE_SCALE, Math.round((WIDE.w * SAVE_SCALE) / across)));
+
+/**
  * Bits per channel: eight reds, eight greens, four blues, which is 256 colours exactly.
  * It's the split the 8-bit displays of the era used, and for the same reason — the eye
  * picks out far less detail in blue than in the other two, so blue is where the levels
@@ -147,9 +180,122 @@ const FILTERS = [
   { id: 'mono', name: 'Monochrome' },
   { id: 'bulge', name: 'Bulge' },
   { id: 'ghost', name: 'Ghost' },
+  { id: 'outline', name: 'Outlines' },
 ] as const;
 
 type Filter = (typeof FILTERS)[number]['id'];
+
+/**
+ * What the outline filter draws its lines with.
+ *
+ * All three find the same edges; they differ only in what the line is drawn with.
+ *
+ * Glowing takes the colour the edge already was and turns it all the way up, the way a
+ * neon sign comes out of a long exposure — which in a room of beige walls is mostly a
+ * white glow. Rainbow draws out of a spectrum instead, so the colour comes from
+ * nothing in the room at all. Ink is a flat line and no colour, which is a drawing of
+ * the room rather than a photograph of it.
+ */
+const PENS = [
+  { id: 'glow', name: 'Glowing' },
+  { id: 'rainbow', name: 'Rainbow' },
+  { id: 'ink', name: 'Ink' },
+] as const;
+
+type Pen = (typeof PENS)[number]['id'];
+
+/**
+ * What the ghost leaves behind, which is a separate question from how long it leaves
+ * it for. All four hold on to the same trail; they differ only in what is painted with
+ * it once the live frame has been taken out of it.
+ *
+ * Standard paints the trail in the colour the room was, which is a stack of fading
+ * photographs of yourself. Rainbow paints it out of the wheel by how old each part of
+ * it is, so a moving hand drags coloured bands behind it that owe nothing to the room.
+ * White throws the colour away and keeps the brightness, which is the one that looks
+ * like a ghost. Melting lets the trail slide down the picture as it fades, so the room
+ * runs off the bottom of the screen.
+ */
+const TRACES = [
+  { id: 'standard', name: 'Standard' },
+  { id: 'rainbow', name: 'Rainbow' },
+  { id: 'white', name: 'White' },
+  { id: 'melt', name: 'Melting' },
+] as const;
+
+type Trace = (typeof TRACES)[number]['id'];
+
+/**
+ * What the lines are drawn on, which is the other half of the question and worth
+ * asking separately: the same rainbow is a neon sign over the room or a drawing of it
+ * in coloured pencil depending only on this.
+ *
+ * On the video the glowing pens add their light to the picture and the ink darkens it,
+ * so the room stays where it is either way. On paper the room goes entirely and only
+ * the lines are left — and ink, being whatever colour the paper isn't, comes out white
+ * on the black and black on the white.
+ */
+const GROUNDS = [
+  { id: 'video', name: 'The video' },
+  { id: 'black', name: 'Black' },
+  { id: 'white', name: 'White' },
+] as const;
+
+type Ground = (typeof GROUNDS)[number]['id'];
+
+/**
+ * The strongest change in brightness a Sobel pass can report: four neighbours at full
+ * weight, all the way from black to white. Edges are measured as a fraction of it, so
+ * the dial that decides which ones survive can be a plain 0 to 1.
+ */
+const EDGE_MAX = 4 * 255;
+
+/**
+ * Where the dial's quiet end puts the bar an edge has to clear. Right on the slider is
+ * every change in the picture, grain included; left is nothing short of the corner of
+ * a wall. Past this the picture goes empty, so the slider stops here rather than
+ * spending its last third on nothing.
+ */
+const FLOOR_MAX = 0.8;
+
+/**
+ * How hard each pen is driven.
+ *
+ * A webcam looking at a room almost never contains a true black-to-white step across
+ * three pixels, so an edge measured honestly against one comes out at a fraction of
+ * the range — which is a picture of grey lines. Both pens are therefore run well over
+ * unity and clipped: an edge some way up the range lights or inks as though it were at
+ * the top, and everything above that point is simply full.
+ *
+ * The gamma bends what is left below the clip so the faint end comes up too, rather
+ * than leaving a hard line and then nothing.
+ *
+ * Clipping the glow rather than letting it run on is what keeps the colour in it: full
+ * means the edge's own colour at full brightness, and anything past that would only
+ * push all three channels into white together.
+ */
+const GLOW_GAMMA = 0.5;
+const GLOW_GAIN = 3.5;
+const INK_GAIN = 4;
+
+/**
+ * The rainbow, as how many times the spectrum is laid across the picture corner to
+ * corner and how long the whole wheel takes to come round again. Laid diagonally so
+ * that a face, which is mostly upright edges, is crossed by several colours at once
+ * rather than being one colour that changes while you watch.
+ */
+const RAINBOW_BANDS = 1.5;
+const RAINBOW_MS = 9000;
+
+/**
+ * A hue, as a fraction of the way round the wheel, at full colour. Three triangles a
+ * third of a turn apart, which is what a hue wheel is once the arithmetic settles.
+ */
+const spectrum = (turn: number) => {
+  const t = (turn - Math.floor(turn)) * 6;
+  const ramp = (v: number) => Math.min(1, Math.max(0, v));
+  return [ramp(Math.abs(t - 3) - 1), ramp(2 - Math.abs(t - 2)), ramp(2 - Math.abs(t - 4))];
+};
 
 /**
  * How far the bulge goes at the ends of its slider. The dial is a power applied to the
@@ -174,11 +320,50 @@ const BULGE_MAX = 2;
 const SUPER = 3;
 
 /**
- * The longest trail the ghost will hold. What the eye reads as trail length is roughly
- * 1/(1 - decay) frames, so 0.98 hangs on about twice as long as 0.96 did — which is
- * what doubling it means, whatever the number looks like.
+ * And how much finer it gets to work at the grid in use. Three times a grid four times
+ * the size would be a two-megapixel frame bent and averaged every frame for a bulge
+ * that already has the pixels to be smooth in — so the fine picture is held at about
+ * six hundred across, which is what three times the grid was.
  */
-const MAX_TRAIL = 0.98;
+const superFine = (across: number) =>
+  Math.max(1, Math.min(SUPER, Math.round((WIDE.w * SUPER) / across)));
+
+/**
+ * The longest trail the ghost will hold, counted in frames rather than in decay,
+ * because what the eye reads as trail length is roughly 1/(1 - decay) — and it is that
+ * number, not the decay, that doubles when the trail looks twice as long. 250 frames
+ * is a smear that takes a good four seconds to let go of the room.
+ */
+const MAX_TRAIL_FRAMES = 250;
+
+/**
+ * How the dial bends on its way up there. Left straight, nearly the whole of it would
+ * sit in the seconds-long trails where one setting looks much like the next, and a
+ * short phosphor tail would be a hair's width off zero. So it is a curve instead:
+ * everything the dial used to reach is inside its first twentieth, and the remaining
+ * nineteen twentieths are the long trails, which are what is new. The exponent is
+ * whatever puts 5% exactly where 70% used to be.
+ */
+const TRAIL_CURVE = 1.58;
+
+/** The dial's own 0–100, as the share of each frame that is left behind in the next. */
+const trailDecay = (dial: number) =>
+  1 - 1 / (1 + (MAX_TRAIL_FRAMES - 1) * Math.pow(dial / 100, TRAIL_CURVE));
+
+/**
+ * How many frames the rainbow trail takes to come round the wheel once. Counted in
+ * frames rather than in time, unlike the rainbow the outlines are drawn with, because
+ * the trail it is colouring is itself a number of frames — banding it by the clock on
+ * a machine dropping frames would put the colours somewhere other than on the trail.
+ */
+const GHOST_WHEEL = 40;
+
+/**
+ * How much of a melting pixel's trail is taken from the pixel above it each frame. It
+ * is a share rather than a step so that the trail slides down smoothly at a fraction
+ * of a pixel a frame, and softens as it goes, which is what selling melting requires.
+ */
+const MELT_DRIFT = 0.3;
 
 /** Rec. 601 weights: how much of the brightness the eye takes from each channel. */
 const luminance = (r: number, g: number, b: number) => 0.299 * r + 0.587 * g + 0.114 * b;
@@ -211,14 +396,21 @@ export function CameraPane(props: { panes: Panes }) {
   /** Whether the screen lights up for a photograph. Off is a picture of the room as-is. */
   const [flashOn, setFlashOn] = createSignal(true);
   const [filter, setFilter] = createSignal<Filter>('none');
+  /** How many grids across the picture is made — the whole app's, not any one filter's. */
+  const [pixels, setPixels] = createSignal<Pixels>('grid');
   /** Monochrome: everything below this is black, and how many tones there are above it. */
   const [cutoff, setCutoff] = createSignal(128);
   const [tones, setTones] = createSignal(2);
   const [dither, setDither] = createSignal<Dither>('ordered');
   /** Bulge: -1 is a fish eye, 0 is the lens as it is, +1 is the same thing inside out. */
   const [bulge, setBulge] = createSignal(0);
-  /** Ghost: how much of each frame is left behind in the next one. */
-  const [trail, setTrail] = createSignal(MAX_TRAIL * 0.7);
+  /** Ghost: how long the trail hangs on, as the dial's own 0–100, and what it's made of. */
+  const [trail, setTrail] = createSignal(50);
+  const [trace, setTrace] = createSignal<Trace>('standard');
+  /** Outlines: which pen draws them, and how much of the picture it finds a line in. */
+  const [pen, setPen] = createSignal<Pen>('glow');
+  const [ground, setGround] = createSignal<Ground>('video');
+  const [lines, setLines] = createSignal(0.8);
   /** Seconds on the clock, for the bar to count up while it records. */
   const [elapsed, setElapsed] = createSignal(0);
 
@@ -250,8 +442,17 @@ export function CameraPane(props: { panes: Panes }) {
   /** Where each pixel of a bulged picture comes from. Rebuilt only when the dial moves. */
   let warp: Int32Array | null = null;
   let warpKey = '';
-  /** What the ghost filter remembers of everything that has been in front of it. */
-  let echo: Uint8ClampedArray | null = null;
+  /**
+   * What the ghost filter remembers of everything that has been in front of it.
+   *
+   * Floating point, and not the eight-bit picture it came from, because a trail is
+   * decayed by multiplying it: rounding the result back to a whole number leaves
+   * anything under half a level short of its neighbour unable to fall any further, and
+   * a trail that stops falling is a hand print burnt into the room for good.
+   */
+  let echo: Float32Array | null = null;
+  /** For the rainbow trail: how many frames it is since each pixel was last live. */
+  let ages: Float32Array | null = null;
   /** Brightness per pixel, in which the error the dither passes along can be fractional. */
   let lumens: Float32Array | null = null;
   /** Where the picture is warped, before it is reduced to the grid. */
@@ -362,14 +563,178 @@ export function CameraPane(props: { panes: Panes }) {
    * faded — so anything bright that moves drags a tail after it and takes a moment to
    * let go. Brightest-wins rather than an average, which keeps the trails glowing
    * instead of turning the whole picture into fog.
+   *
+   * What the trail is painted with is the trace's business, and to give it anything to
+   * paint the live frame has to come back out of the composite: the trail proper is
+   * only the part of it the room isn't already brighter than, which is nothing at all
+   * across everything that has been sitting still. Taken as the strongest channel of
+   * that difference rather than its brightness, so that a red sleeve leaves as strong
+   * a trail as a white one — measured honestly, a saturated colour would be recoloured
+   * into a much darker trail than the one it replaces.
    */
-  const applyGhost = (px: Uint8ClampedArray, decay: number) => {
-    if (!echo || echo.length !== px.length) echo = new Uint8ClampedArray(px.length);
-    for (let i = 0; i < px.length; i += 4) {
-      for (let c = 0; c < 3; c++) {
-        const lit = Math.max(px[i + c]!, echo[i + c]! * decay);
-        echo[i + c] = lit;
-        px[i + c] = lit;
+  const applyGhost = (
+    px: Uint8ClampedArray,
+    w: number,
+    h: number,
+    decay: number,
+    how: Trace,
+  ) => {
+    if (!echo || echo.length !== px.length) echo = new Float32Array(px.length);
+    const held = echo;
+    if (how === 'rainbow' && (!ages || ages.length !== w * h)) ages = new Float32Array(w * h);
+    const age = ages;
+
+    // Bottom upwards, so that a melting pixel reads the row above while it is still
+    // the row of the frame before — the whole point being that it is behind this one.
+    for (let y = h - 1; y >= 0; y--) {
+      for (let x = 0; x < w; x++) {
+        const i = y * w + x;
+        const at = i * 4;
+        // The top row has nothing above it to melt in, so it drifts into itself.
+        const from = how === 'melt' && y > 0 ? at - w * 4 : at;
+
+        let gain = 0;
+        for (let c = 0; c < 3; c++) {
+          // Melting drags the trail downwards by taking a share of it from above.
+          const was =
+            how === 'melt'
+              ? held[at + c]! * (1 - MELT_DRIFT) + held[from + c]! * MELT_DRIFT
+              : held[at + c]!;
+          const lit = Math.max(px[at + c]!, was * decay);
+          held[at + c] = lit;
+          const trail = lit - px[at + c]!;
+          if (trail > gain) gain = trail;
+        }
+
+        if (how === 'white') {
+          // The brightness of the trail and none of its colour: smoke, rather than a
+          // stack of photographs of you.
+          px[at] = px[at]! + gain;
+          px[at + 1] = px[at + 1]! + gain;
+          px[at + 2] = px[at + 2]! + gain;
+        } else if (how === 'rainbow' && age) {
+          // A pixel the room is brighter than has no trail on it and is therefore new
+          // again — which is what puts the start of the wheel at the moving edge and
+          // walks the older bands backwards along the path the hand took.
+          age[i] = gain < 1 ? 0 : age[i]! + 1;
+          const hue = spectrum(age[i]! / GHOST_WHEEL);
+          px[at] = px[at]! + gain * hue[0]!;
+          px[at + 1] = px[at + 1]! + gain * hue[1]!;
+          px[at + 2] = px[at + 2]! + gain * hue[2]!;
+        } else {
+          px[at] = held[at]!;
+          px[at + 1] = held[at + 1]!;
+          px[at + 2] = held[at + 2]!;
+        }
+      }
+    }
+  };
+
+  /**
+   * Edges, by Sobel: at every pixel, how sharply the brightness changes across and
+   * down. Both come out near zero in the middle of a wall and large where an arm stops
+   * and the room behind it starts, so what survives is the outline of everything in
+   * front of the camera and nothing of what it is filled in with.
+   *
+   * Brightness is taken for the whole picture first. Each pixel needs the eight around
+   * it, so working straight off the colours would compute the same luminance nine
+   * times over — and the pixel being written is never one of the pixels being read.
+   */
+  const applyEdges = (
+    px: Uint8ClampedArray,
+    w: number,
+    h: number,
+    floor: number,
+    how: Pen,
+    on: Ground,
+    /** Where the rainbow has got to, in turns of the wheel. Nothing to the other pens. */
+    spin: number,
+  ) => {
+    if (!lumens || lumens.length !== w * h) lumens = new Float32Array(w * h);
+    const lit = lumens;
+    for (let i = 0, at = 0; i < lit.length; i++, at += 4) {
+      lit[i] = luminance(px[at]!, px[at + 1]!, px[at + 2]!);
+    }
+
+    /** The picture has no pixel outside it, so its edge repeats rather than falls off. */
+    const bright = (x: number, y: number) =>
+      lit[Math.min(h - 1, Math.max(0, y)) * w + Math.min(w - 1, Math.max(0, x))]!;
+    // Everything below the dial is nothing; everything above it is spread over the
+    // whole range again, so the brightest line is a full one wherever the dial sits.
+    const span = Math.max(0.01, 1 - floor);
+
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const tl = bright(x - 1, y - 1);
+        const tm = bright(x, y - 1);
+        const tr = bright(x + 1, y - 1);
+        const ml = bright(x - 1, y);
+        const mr = bright(x + 1, y);
+        const bl = bright(x - 1, y + 1);
+        const bm = bright(x, y + 1);
+        const br = bright(x + 1, y + 1);
+        const gx = tr + 2 * mr + br - (tl + 2 * ml + bl);
+        const gy = bl + 2 * bm + br - (tl + 2 * tm + tr);
+        const edge = Math.min(1, Math.hypot(gx, gy) / EDGE_MAX);
+        const line = Math.min(1, Math.max(0, (edge - floor) / span));
+
+        const i = (y * w + x) * 4;
+        // How much of the pixel the line covers: ink goes solid a quarter of the way
+        // up the range and the glowing pens a little under a third, both of them well
+        // over what the edge honestly measured, for the reason given at the gains.
+        const cover =
+          how === 'ink'
+            ? Math.min(1, line * INK_GAIN)
+            : Math.min(1, Math.pow(line, GLOW_GAMMA) * GLOW_GAIN);
+
+        // What the line is drawn in. Taken before anything is written, since glowing
+        // reads the colour of the very pixel it is about to cover.
+        let r: number;
+        let g: number;
+        let b: number;
+        if (how === 'rainbow') {
+          // A diagonal band walking round the wheel: the colour owes nothing to the
+          // room, so a white wall in white light still comes out in colour.
+          const hue = spectrum(((x + y) / (w + h)) * RAINBOW_BANDS + spin);
+          r = hue[0]! * 255;
+          g = hue[1]! * 255;
+          b = hue[2]! * 255;
+        } else if (how === 'glow') {
+          // The colour the edge already was, turned all the way up, so a red collar
+          // glows red rather than pink. A pixel too near black to have a colour left
+          // in it glows white, there being nothing else for it to be.
+          const top = Math.max(px[i]!, px[i + 1]!, px[i + 2]!);
+          const gain = top < 8 ? 0 : 255 / top;
+          r = top < 8 ? 255 : px[i]! * gain;
+          g = top < 8 ? 255 : px[i + 1]! * gain;
+          b = top < 8 ? 255 : px[i + 2]! * gain;
+        } else {
+          r = g = b = on === 'black' ? 255 : 0;
+        }
+
+        if (on === 'video') {
+          if (how === 'ink') {
+            // Drawn on, not drawn over: the room comes through everywhere the pen
+            // hasn't been, and goes to black where it has.
+            px[i] = px[i]! * (1 - cover);
+            px[i + 1] = px[i + 1]! * (1 - cover);
+            px[i + 2] = px[i + 2]! * (1 - cover);
+          } else {
+            // Light added to what is already there, so nothing is added where there
+            // was no edge. Over 255 is clamped on the way into the array, which is
+            // what burning out looks like.
+            px[i] = px[i]! + r * cover;
+            px[i + 1] = px[i + 1]! + g * cover;
+            px[i + 2] = px[i + 2]! + b * cover;
+          }
+          continue;
+        }
+
+        // Paper: the room is gone and there is only the line and what it is on.
+        const paper = on === 'black' ? 0 : 255;
+        px[i] = paper + (r - paper) * cover;
+        px[i + 1] = paper + (g - paper) * cover;
+        px[i + 2] = paper + (b - paper) * cover;
       }
     }
   };
@@ -446,9 +811,11 @@ export function CameraPane(props: { panes: Panes }) {
   };
 
   // Whatever the ghost was holding on to belongs to the filter, not to the camera.
+  // The traces all hold the same trail, though, so switching between them keeps it.
   createEffect(() => {
     filter();
     echo = null;
+    ages = null;
   });
 
   /** The flash is the whole screen, so the OS works it. This pane only says when. */
@@ -487,8 +854,9 @@ export function CameraPane(props: { panes: Panes }) {
     const grid = size();
 
     const shot = document.createElement('canvas');
-    shot.width = grid.w * SAVE_SCALE;
-    shot.height = grid.h * SAVE_SCALE;
+    const blowUp = saveScale(grid.w);
+    shot.width = grid.w * blowUp;
+    shot.height = grid.h * blowUp;
     const ctx = shot.getContext('2d');
     if (!ctx) return;
     ctx.imageSmoothingEnabled = false;
@@ -536,8 +904,9 @@ export function CameraPane(props: { panes: Panes }) {
   const startRecording = () => {
     const grid = size();
     tape = document.createElement('canvas');
-    tape.width = grid.w * SAVE_SCALE;
-    tape.height = grid.h * SAVE_SCALE;
+    const blowUp = saveScale(grid.w);
+    tape.width = grid.w * blowUp;
+    tape.height = grid.h * blowUp;
     tapeCtx = tape.getContext('2d');
     if (!tapeCtx) return;
     tapeCtx.imageSmoothingEnabled = false;
@@ -661,11 +1030,31 @@ export function CameraPane(props: { panes: Panes }) {
       if (!vw || !vh || video.readyState < 2) return;
 
       // Portrait cameras get the portrait grid, and turning the phone re-sizes the canvas.
-      const grid = vw >= vh ? WIDE : TALL;
-      if (grid !== size()) {
+      const base = vw >= vh ? WIDE : TALL;
+
+      // The largest rectangle of that shape that the feed contains, taken from the
+      // middle: a wide camera loses its sides, a tall one its top and bottom. Worked
+      // out from the orientation rather than from the grid below, which is the same
+      // shape at every resolution and at Original is decided by this.
+      const wanted = base.w / base.h;
+      const sw = vw / vh > wanted ? vh * wanted : vw;
+      const sh = vw / vh > wanted ? vh : vw / wanted;
+      const sx = (vw - sw) / 2;
+      const sy = (vh - sh) / 2;
+
+      const grids = PIXELS.find((p) => p.id === pixels())!.grids;
+      const grid = grids
+        ? { w: base.w * grids, h: base.h * grids }
+        : { w: Math.round(sw), h: Math.round(sh) };
+
+      // By value, not by identity: past the grid itself these are worked out afresh
+      // every frame, and a new object every frame would be a new size every frame.
+      const had = size();
+      if (had.w !== grid.w || had.h !== grid.h) {
         setSize(grid);
-        // Nothing either of these holds lines up with the new shape.
+        // Nothing any of these holds lines up with the new shape.
         echo = null;
+        ages = null;
         work = null;
       }
       if (canvas.width !== grid.w) canvas.width = grid.w;
@@ -674,18 +1063,11 @@ export function CameraPane(props: { panes: Panes }) {
       ctx ??= canvas.getContext('2d', { willReadFrequently: true });
       if (!ctx) return;
 
-      // The largest rectangle of this shape that the feed contains, taken from the middle:
-      // a wide camera loses its sides, a tall one its top and bottom.
-      const wanted = grid.w / grid.h;
-      const sw = vw / vh > wanted ? vh * wanted : vw;
-      const sh = vw / vh > wanted ? vh : vw / wanted;
-      const sx = (vw - sw) / 2;
-      const sy = (vh - sh) / 2;
-
       if (filter() === 'bulge' && bulge() !== 0) {
-        // Bent at three times the grid, then averaged down onto it.
-        const w = grid.w * SUPER;
-        const h = grid.h * SUPER;
+        // Bent finer than the grid, then averaged down onto it.
+        const fine = superFine(grid.w);
+        const w = grid.w * fine;
+        const h = grid.h * fine;
         if (!work || work.width !== w || work.height !== h) {
           work = document.createElement('canvas');
           work.width = w;
@@ -711,13 +1093,24 @@ export function CameraPane(props: { panes: Panes }) {
       // belong here instead: the ghost reads the same either side of the reduction and
       // would cost a megabyte a frame to keep at full size, and monochrome is a colour
       // stage — reducing to greys and then averaging them back together would undo it.
-      if (chosen === 'ghost') applyGhost(px, trail());
+      if (chosen === 'ghost')
+        applyGhost(px, grid.w, grid.h, trailDecay(trail()), trace());
+      if (chosen === 'outline') {
+        // The wheel is walked by the clock rather than by the frame, so it comes round
+        // at the same speed on a computer struggling to keep up as on one that isn't.
+        const spin = performance.now() / RAINBOW_MS;
+        applyEdges(px, grid.w, grid.h, (1 - lines()) * FLOOR_MAX, pen(), ground(), spin);
+      }
 
       if (chosen === 'mono') {
         // Its own handful of greys, so it skips the 256: putting an even grey through
         // three reds, three greens and two blues would come out faintly tinted.
         applyMono(px, grid.w, grid.h, cutoff(), tones(), dither());
-      } else {
+      } else if (chosen !== 'outline' || pen() !== 'ink' || ground() === 'video') {
+        // Ink on paper is skipped for the reason monochrome above it is: it comes out
+        // black and white already, and a tinted line drawing is a smudged one. Ink on
+        // the video is a colour picture with lines drawn on it, and goes through the
+        // palette like everything else does.
         for (let y = 0; y < grid.h; y++) {
           for (let x = 0; x < grid.w; x++) {
             const i = (y * grid.w + x) * 4;
@@ -784,7 +1177,16 @@ export function CameraPane(props: { panes: Panes }) {
           {/* Sized to fit, never to crop; the black either side of it is the bars. */}
           <canvas
             ref={canvas}
-            style={{ width: `${display().w}px`, height: `${display().h}px` }}
+            style={{
+              width: `${display().w}px`,
+              height: `${display().h}px`,
+              /* Square blocks are the point of the app while the picture is being
+                 magnified, which at the grid it always is. At the larger resolutions in
+                 a small window it is being shrunk instead, and nearest-neighbour
+                 shrinking throws away whole pixels and shimmers as anything moves — so
+                 that case is smoothed, the same as any other photograph would be. */
+              'image-rendering': display().w < size().w ? 'auto' : 'pixelated',
+            }}
           />
           <Show when={!live()}>
             <p class="camera-message is-over">Starting the camera…</p>
@@ -860,17 +1262,57 @@ export function CameraPane(props: { panes: Panes }) {
             </Match>
 
             <Match when={filter() === 'ghost'}>
+              <label>
+                Style
+                <select
+                  value={trace()}
+                  onChange={(e) => setTrace(e.currentTarget.value as Trace)}
+                >
+                  <For each={TRACES}>{(t) => <option value={t.id}>{t.name}</option>}</For>
+                </select>
+              </label>
               <label class="is-wide">
                 Trail
-                {/* The slider is the whole range; the range itself is up at MAX_TRAIL. */}
+                {/* The dial is kept as its own 0–100; TRAIL_CURVE says what that means. */}
                 <input
                   type="range"
                   min="0"
                   max="100"
-                  value={Math.round((trail() / MAX_TRAIL) * 100)}
-                  onInput={(e) => setTrail((e.currentTarget.valueAsNumber / 100) * MAX_TRAIL)}
+                  value={trail()}
+                  onInput={(e) => setTrail(e.currentTarget.valueAsNumber)}
                 />
-                <output>{Math.round((trail() / MAX_TRAIL) * 100)}%</output>
+                <output>{trail()}%</output>
+              </label>
+            </Match>
+
+            <Match when={filter() === 'outline'}>
+              <label>
+                Pen
+                <select value={pen()} onChange={(e) => setPen(e.currentTarget.value as Pen)}>
+                  <For each={PENS}>{(p) => <option value={p.id}>{p.name}</option>}</For>
+                </select>
+              </label>
+              <label>
+                On
+                <select
+                  value={ground()}
+                  onChange={(e) => setGround(e.currentTarget.value as Ground)}
+                >
+                  <For each={GROUNDS}>{(g) => <option value={g.id}>{g.name}</option>}</For>
+                </select>
+              </label>
+              <label>
+                Lines
+                {/* Left draws only the edges the room is actually made of; right finds
+                    a line in every change in the picture, the sensor's grain included. */}
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={Math.round(lines() * 100)}
+                  onInput={(e) => setLines(e.currentTarget.valueAsNumber / 100)}
+                />
+                <output>{Math.round(lines() * 100)}</output>
               </label>
             </Match>
           </Switch>
@@ -931,6 +1373,16 @@ export function CameraPane(props: { panes: Panes }) {
             onChange={(e) => setFilter(e.currentTarget.value as Filter)}
           >
             <For each={FILTERS}>{(f) => <option value={f.id}>{f.name}</option>}</For>
+          </select>
+        </label>
+
+        <label class="camera-pick">
+          Pixels
+          <select
+            value={pixels()}
+            onChange={(e) => setPixels(e.currentTarget.value as Pixels)}
+          >
+            <For each={PIXELS}>{(p) => <option value={p.id}>{p.name}</option>}</For>
           </select>
         </label>
 

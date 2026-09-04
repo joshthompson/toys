@@ -5,8 +5,8 @@ import {
   ICON_SIZE_OPTIONS,
   isIconSize,
   type Panes,
-} from './shell';
-import { NO_SCREENSAVER, SCREENSAVERS } from './screensavers';
+} from '../os/shell';
+import { NO_SCREENSAVER, SCREENSAVERS } from '../os/screensavers';
 
 const SWATCHES = [
   { name: 'Teal', value: DEFAULT_DESKTOP },

@@ -6,7 +6,7 @@
  * Dropped files are the exception: they'd eat the whole localStorage quota, so their
  * contents live in IndexedDB (see ./files) and only their positions are kept here.
  */
-import type { IconSize, Point } from './shell';
+import type { Folder, IconSize, Point, Transaction } from './shell';
 
 const KEY = 'josh-os';
 
@@ -34,6 +34,27 @@ export type Saved = {
    * save without this gets one re-flow to bring it into line, and then says so here.
    */
   grouped: boolean;
+  /**
+   * The bank's ledger. Money is the one thing on this desktop that would be genuinely
+   * annoying to lose on a reload, joke money or not.
+   */
+  bank: Transaction[];
+  /**
+   * Whether those amounts are in moneys. They were briefly kept in cents of a currency
+   * this computer no longer recognises, and a save from then is worth a hundred times
+   * what it says it is — so one without this flag is converted on the way in, and then
+   * says so here. The same trick as `grouped` above, for the same reason.
+   */
+  moneys: boolean;
+  /** The folders, and which folder each thing is in. Absent means out on the desktop. */
+  folders: Folder[];
+  inside: Record<string, string>;
+  /**
+   * Whether the account has been opened. Opening it is the one and only time money
+   * goes in, so a save without this gets its hundred and then says so — otherwise
+   * every reload would be payday, and the whole point of the account is that it isn't.
+   */
+  opened: boolean;
 };
 
 /** Whatever was saved last, or nothing at all — every field is treated as optional on the way in. */

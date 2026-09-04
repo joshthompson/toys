@@ -1,5 +1,5 @@
 import { createSignal, onCleanup, Show, type JSX } from 'solid-js';
-import type { DesktopFile } from './files';
+import type { DesktopFile } from '../os/files';
 
 /**
  * The bits Josh's Listening To Stuff App and Josh's Video Playback App have in common:

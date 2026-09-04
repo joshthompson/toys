@@ -1,4 +1,4 @@
-import { binName, type Panes } from './shell';
+import { binName, type Panes } from '../os/shell';
 
 export function AboutPane(props: { panes: Panes }) {
   const depth = () => props.panes.binLevels().length - 1;

@@ -91,4 +91,4 @@ console.log(`✓ Added "${name}:serve" and "${name}:build" scripts`);
 console.log('');
 console.log('Next steps:');
 console.log(`  • pnpm ${name}:serve            # dev server`);
-console.log(`  • Add it to the toy list in apps/home/src/toys.ts ({ name: '${display}', href: '${name}/' })`);
+console.log(`  • Add it to the toy list in apps/home/src/os/toys.ts ({ name: '${display}', href: '${name}/' })`);
